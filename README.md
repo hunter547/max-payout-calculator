@@ -1,9 +1,9 @@
 # Max Payout Calculator
 
 A React + TypeScript app for working through a MyFundedFutures 50k Builder
-payout cycle. Log each trading day's P&L since your last payout and it tells you
-how many more days you need, how much to make each day, and the most any one
-day can make before the consistency rule raises the target.
+payout cycle. It tells you how many more trading days you need, how much to make
+each day, and the most any one day can make before the consistency rule raises
+the target.
 
 The calculations are ported from
 `MyFundedFutrures 50k Builder Max Payout Calculator.xlsx`.
@@ -15,26 +15,68 @@ npm install
 npm run dev      # http://localhost:5173
 npm run build    # typecheck + production bundle
 npm run lint
-npm test         # calculation parity, ledger, and UI tests
+npm test         # calculation parity, ledger, setup, and UI tests
 ```
 
-## What you enter
+## First visit: the walkthrough
 
-- **Days since last payout.** One row per trading day: date and P&L. Losing
-  days count. Edit or remove any row inline; "Start a new cycle" clears the
-  list once a payout is approved.
-- **Account.** Balance, payout buffer, payout cap, and the consistency rule.
-  These default to the values saved in the spreadsheet.
+With nothing in local storage, the app opens a short screen-by-screen
+walkthrough instead of the dashboard. It starts with one question: how do you
+want to track this payout?
 
-From the ledger the app derives the two inputs you used to type into the sheet:
+**Point-in-time.** Copy three numbers from your account, one per screen:
 
-| Sheet cell | Now derived as |
-|------------|----------------|
-| `D3` Largest Profit Day | the biggest winning day (0 until you have one) |
-| `F3` Current Net Profit | the sum of every day, losses included |
+1. Current balance
+2. Largest profit day
+3. Cumulative profit since the last payout (it resets after each payout)
 
-Everything is saved in your browser's `localStorage` (`mpc.days`,
-`mpc.account`, `mpc.theme`). Nothing is sent anywhere.
+**Day-by-day.** Log each trading day instead:
+
+1. Have you taken a payout from this account yet?
+2. If yes: your current balance. If not, this screen is skipped and the balance
+   is worked out from your logged days.
+3. Each day's profit or loss, positive or negative. You can add more later.
+
+Both paths end on one last question: **Conservative or Aggressive?** Each card
+previews the plan it would give you for the numbers you just entered.
+
+"Show my plan" on the last screen saves everything and opens the dashboard.
+"Change approach" in the dashboard header reopens the walkthrough, prefilled,
+and "Keep my current setup" backs out without changing anything.
+
+Storage from before the walkthrough existed (logged days but no setup) skips it
+and opens as day-by-day with the balance you'd entered.
+
+### About the balance
+
+The spreadsheet's Balance is measured from the $50,000 starting balance: its
+formula compares it against payout buffer plus payout cap ($4,100), and its
+saved value is 4,758.34. The app asks for it the same way. Before any payout,
+that balance is the sum of every day since the account started, which is how
+day-by-day works it out.
+
+## The dashboard
+
+- **Headline and chart:** how many more days at how much each, plotted against
+  the daily cap. Logged days are solid columns; planned days are outlined.
+- **Day-by-day:** a ledger of each day's P&L, edited inline. An "I've taken a
+  payout" switch chooses between an entered and a derived balance.
+- **Point-in-time:** "Your numbers" holds the three values from the walkthrough.
+- **Account:** payout buffer, payout cap, and consistency rule, defaulting to the
+  spreadsheet's values.
+- **How the target is set:** which rule is driving the profit you need.
+
+Largest profit day and cumulative profit map to the sheet like this:
+
+| Sheet cell | Point-in-time | Day-by-day |
+|------------|---------------|------------|
+| `A3` Balance | entered | entered after a payout, else sum of logged days |
+| `D3` Largest Profit Day | entered | biggest winning day (0 until you have one) |
+| `F3` Current Net Profit | entered | sum of every day, losses included |
+
+Everything is saved in your browser's `localStorage` (`mpc.setup`,
+`mpc.account`, `mpc.snapshot`, `mpc.days`, `mpc.theme`). Nothing is sent
+anywhere.
 
 ## The calculations
 
@@ -53,8 +95,32 @@ the consistency rule. Because `H3` is at least `largest day ÷ G3`, your largest
 day can never exceed the cap, and `J3` spreads the remaining profit so each
 planned day stays under it too. Make a bigger day than the cap and `H3` rises.
 
-[`src/lib/ledger.ts`](src/lib/ledger.ts) turns the ledger into `D3` and `F3`,
+[`src/lib/ledger.ts`](src/lib/ledger.ts) turns logged days into `D3` and `F3`,
 and dates the planned days on the next weekdays, starting no earlier than today.
+
+### Conservative and aggressive plans
+
+Switch between them with the **Plan** toggle above the chart.
+
+- **Conservative** is the spreadsheet's plan: `J3` days of `K3`. Every planned
+  day stays at or under the daily cap, which is the default cap (`E3 × G3`) or
+  your largest profit day, whichever is higher. Your largest day never grows,
+  so the target never moves.
+- **Aggressive** is the fewest days to payout, whatever each day has to make.
+  Days bigger than your largest day raise the target, and the plan counts that.
+
+For `n` equal days of `x`, with `F` = net profit, `D` = largest day, `E` =
+minimum target and `G` = consistency, the final total `T = F + n·x` must satisfy
+`T ≥ E` and `max(D, x) ≤ G·T`. That reduces to `x ≥ I3 / n` plus
+`x·(1 − G·n) ≤ G·F`, and `planFor` in `calc.ts` takes the smallest `n` where a
+valid `x` exists. Equal days are optimal, since for a given total they keep the
+largest day as small as possible, and the conservative plan always satisfies
+the same rules, so aggressive is never slower.
+
+Example: at −$1,050 cumulative profit with a $500 largest day and a 50% rule,
+conservative takes 5 days of $410; aggressive takes 3 days of $1,050, lifting
+the profit target from $1,000 to $2,100. With profit already banked the two
+usually agree, and the walkthrough says so when they do.
 
 ### Deliberate differences from the spreadsheet
 
@@ -75,20 +141,22 @@ instead, and the tests pin each one:
 - **Type:** Archivo variable, one family, using its width axis: expanded and
   heavy for headings, condensed with tabular figures for money.
 - **Color:** cool fog paper, graphite ink, jade profit, signal red loss, and
-  cobalt for the daily cap and planned days. Tokens live in
-  [`src/index.css`](src/index.css).
+  cobalt for the daily cap, planned days, and walkthrough progress. Tokens live
+  in [`src/index.css`](src/index.css).
 - **Chart colors are validated,** not eyeballed, for colorblind separation and
   contrast in both themes. In dark mode, profit is the lighter step and loss the
   deeper one (the reverse of light mode) so the pair stays distinct under
   protanopia. The chart also encodes profit and loss by direction from the
   baseline, and the ledger doubles as its table view.
+- **Motion:** one short fade-and-rise as each walkthrough screen appears.
+  Reduced-motion settings turn it off.
 
 ## UI components
 
 Built on [shadcn/ui](https://ui.shadcn.com) (new-york style, Tailwind v4):
-`button`, `input`, `label`, `table`, `badge`, `separator`, `tooltip`, `alert`,
-in `src/components/ui/`. The P&L chart is hand-built SVG in
-`src/components/PnlChart.tsx`.
+`alert`, `badge`, `button`, `input`, `label`, `progress`, `radio-group`,
+`separator`, `switch`, `table`, and `tooltip`, in `src/components/ui/`. The P&L
+chart is hand-built SVG in `src/components/PnlChart.tsx`.
 
 To add another component:
 
@@ -105,12 +173,18 @@ in `src/lib/utils.ts`. If the CLI installs `cn` into `package.json`, remove it.
 
 - `src/lib/calc.test.ts`: the port reproduces every cached formula result in
   the workbook (`E3=500`, `H3=718`, `I3=711.4`, `J3=2`, `K3=355.7`) from its
-  saved inputs, plus the branch and edge cases above.
+  saved inputs, plus the branch and edge cases above. The aggressive plan is
+  checked across a sweep of balances, drawdowns, largest days, and consistency
+  rules: it always pays out, is never slower than conservative, and a brute-force
+  search confirms no daily amount gets there a day sooner.
 - `src/lib/ledger.test.ts`: largest day and net profit from daily entries,
   pasted formatting like `$1,200`, and weekend-aware plan dates.
-- `src/App.test.tsx`: mounts the app in jsdom, logs a history that reproduces
-  the workbook (`+359`, `−212.40`, `−140` → `$355.70` a day for two days), and
-  covers editing, removing, invalid input, and the target-met state.
+- `src/lib/setup.test.ts`: which walkthrough screens each path shows, and
+  detecting storage from before the walkthrough.
+- `src/App.test.tsx`: mounts the app in jsdom and walks both walkthrough paths
+  to the workbook's `$355.70` a day, covers the no-payout path's derived
+  balance, validation, reopening and cancelling, and both dashboards' editing,
+  removing, invalid input, and target-met states.
 
 ## Node version
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildPlan, calculate, type CalcInputs } from './calc'
+import { buildPlan, calculate, planFor, type CalcInputs } from './calc'
 
 /** The exact input row (A3:G3) saved in the .xlsx. */
 const SHEET_INPUTS: CalcInputs = {
@@ -93,7 +93,10 @@ describe('consistency guardrail', () => {
 describe('buildPlan', () => {
   it('walks current net profit up to the requirement', () => {
     const results = calculate(SHEET_INPUTS)
-    const plan = buildPlan(SHEET_INPUTS, results)
+    const plan = buildPlan(
+      SHEET_INPUTS,
+      planFor(SHEET_INPUTS, results, 'conservative'),
+    )
 
     expect(plan).toHaveLength(2)
     expect(plan[0].profitNeeded).toBeCloseTo(355.7, 9)
@@ -105,6 +108,107 @@ describe('buildPlan', () => {
 
   it('is empty when no further trading days are required', () => {
     const inputs = { ...SHEET_INPUTS, currentNetProfit: 5000 }
-    expect(buildPlan(inputs, calculate(inputs))).toHaveLength(0)
+    const results = calculate(inputs)
+    expect(buildPlan(inputs, planFor(inputs, results, 'aggressive'))).toHaveLength(0)
+  })
+})
+
+describe('planFor', () => {
+  it('conservative is exactly the spreadsheet plan', () => {
+    const results = calculate(SHEET_INPUTS)
+    expect(planFor(SHEET_INPUTS, results, 'conservative')).toEqual({
+      strategy: 'conservative',
+      days: 2,
+      dailyProfit: results.dailyProfitNeeded,
+      requiredProfit: 718,
+      dailyCap: 359,
+      raisesTarget: false,
+    })
+  })
+
+  it('aggressive matches conservative when nothing needs to be caught up', () => {
+    const results = calculate(SHEET_INPUTS)
+    const plan = planFor(SHEET_INPUTS, results, 'aggressive')
+    expect(plan.days).toBe(2)
+    expect(plan.dailyProfit).toBeCloseTo(355.7, 9)
+    expect(plan.raisesTarget).toBe(false)
+  })
+
+  it('aggressive: −$1,050 with a $500 largest day takes 3 days of $1,050', () => {
+    const inputs = {
+      ...SHEET_INPUTS,
+      largestProfitDay: 500,
+      currentNetProfit: -1050,
+    }
+    const results = calculate(inputs)
+
+    // Conservative stays under the $500 cap: $2,050 over 5 days.
+    const safe = planFor(inputs, results, 'conservative')
+    expect(safe.days).toBe(5)
+    expect(safe.dailyProfit).toBeCloseTo(410, 9)
+
+    // Aggressive: 3 days of $1,050 lifts the target to $2,100.
+    const fast = planFor(inputs, results, 'aggressive')
+    expect(fast.days).toBe(3)
+    expect(fast.dailyProfit).toBeCloseTo(1050, 9)
+    expect(fast.requiredProfit).toBeCloseTo(2100, 9)
+    expect(fast.dailyCap).toBeCloseTo(1050, 9)
+    expect(fast.raisesTarget).toBe(true)
+  })
+
+  it('aggressive is never slower, always pays out, and is the fewest days', () => {
+    // Direct check of the rules the plan has to satisfy on final totals.
+    const pays = (inputs: CalcInputs, n: number, x: number) => {
+      const total = inputs.currentNetProfit + n * x
+      const target = Math.max(
+        500,
+        inputs.payoutBuffer + inputs.payoutCap - inputs.balance,
+      )
+      const largest = Math.max(Math.abs(inputs.largestProfitDay), x)
+      return (
+        total >= target - 1e-6 &&
+        largest <= inputs.consistencyRequirement * total + 1e-6
+      )
+    }
+
+    for (const balance of [4758.34, 1000]) {
+      for (const currentNetProfit of [-3000, -1050, -400, 0, 6.6, 250, 900]) {
+        for (const largestProfitDay of [0, 359, 500, 1200]) {
+          for (const consistencyRequirement of [0.2, 0.3, 0.5, 0.8]) {
+            const inputs = {
+              ...SHEET_INPUTS,
+              balance,
+              currentNetProfit,
+              largestProfitDay,
+              consistencyRequirement,
+            }
+            const results = calculate(inputs)
+            if (results.targetMet) continue
+
+            const safe = planFor(inputs, results, 'conservative')
+            const fast = planFor(inputs, results, 'aggressive')
+            const at = JSON.stringify(inputs)
+
+            expect(fast.days, at).toBeLessThanOrEqual(safe.days)
+            expect(pays(inputs, fast.days, fast.dailyProfit), at).toBe(true)
+            expect(fast.dailyProfit, at).toBeLessThanOrEqual(fast.dailyCap + 1e-6)
+            expect(fast.requiredProfit, at).toBeCloseTo(
+              currentNetProfit + fast.days * fast.dailyProfit,
+              6,
+            )
+
+            // No daily amount gets there a day sooner. Collect, then assert
+            // once: calling expect() per grid step makes this test crawl.
+            if (fast.days > 1) {
+              let sooner: number | null = null
+              for (let x = 0; x <= 20000 && sooner === null; x += 0.5) {
+                if (pays(inputs, fast.days - 1, x)) sooner = x
+              }
+              expect(sooner, at).toBeNull()
+            }
+          }
+        }
+      }
+    }
   })
 })

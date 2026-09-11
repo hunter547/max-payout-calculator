@@ -41,7 +41,10 @@ interface LedgerProps {
   onAdd: (entry: { date: string; amount: string }) => void
   onUpdate: (id: string, patch: Partial<Omit<DayEntry, 'id'>>) => void
   onRemove: (id: string) => void
-  onClear: () => void
+  /** Shown as "Start a new cycle" when provided. */
+  onClear?: () => void
+  /** Drop the heading and intro, for use inside the walkthrough. */
+  compact?: boolean
 }
 
 const INLINE_INPUT =
@@ -64,6 +67,7 @@ export function Ledger({
   onUpdate,
   onRemove,
   onClear,
+  compact = false,
 }: LedgerProps) {
   const [date, setDate] = useState(suggestedDate)
   const [amount, setAmount] = useState('')
@@ -90,26 +94,34 @@ export function Ledger({
   let running = 0
 
   return (
-    <section aria-labelledby="ledger-heading" className="min-w-0">
-      <div className="flex items-baseline justify-between gap-4">
-        <h2 id="ledger-heading" className="font-expanded text-xl font-bold">
-          Days since last payout
-        </h2>
-        {entries.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={onClear}>
-            Start a new cycle
-          </Button>
-        )}
-      </div>
-      <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">
-        Log each trading day’s P&L. Your largest day and net profit update from
-        these entries.
-      </p>
+    <section
+      aria-labelledby={compact ? undefined : 'ledger-heading'}
+      aria-label={compact ? 'Trading days' : undefined}
+      className="min-w-0"
+    >
+      {!compact && (
+        <>
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 id="ledger-heading" className="font-expanded text-xl font-bold">
+              Days since last payout
+            </h2>
+            {onClear && entries.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={onClear}>
+                Start a new cycle
+              </Button>
+            )}
+          </div>
+          <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">
+            Log each trading day’s P&L. Your largest day and net profit update
+            from these entries.
+          </p>
+        </>
+      )}
 
       <form
         onSubmit={submit}
         noValidate
-        className="mt-5 flex flex-wrap items-end gap-3"
+        className={cn('flex flex-wrap items-end gap-3', !compact && 'mt-5')}
       >
         <div className="grid gap-1.5">
           <Label htmlFor="new-date">Date</Label>
@@ -139,7 +151,7 @@ export function Ledger({
             className="font-figure"
           />
         </div>
-        <Button type="submit">
+        <Button type="submit" variant={compact ? 'outline' : 'default'}>
           <Plus />
           Add day
         </Button>
@@ -154,8 +166,9 @@ export function Ledger({
         <div className="mt-6 border-t border-dashed pt-6">
           <p className="font-medium">No trading days yet</p>
           <p className="mt-1 max-w-[52ch] text-sm text-muted-foreground">
-            Add every day since your last payout, losing days too. The plan
-            above is built from your account settings until then.
+            {compact
+              ? 'Add your first day above, or continue and add days later.'
+              : 'Add every day since your last payout, losing days too. The plan above is built from your account settings until then.'}
           </p>
         </div>
       ) : (

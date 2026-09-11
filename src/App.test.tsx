@@ -8,6 +8,22 @@ declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean
 }
 
+// Radix measures switches and radios with ResizeObserver, which jsdom lacks.
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver ??=
+  ResizeObserverStub as unknown as typeof ResizeObserver
+
+const WORKBOOK_ACCOUNT = {
+  balance: '4758.34',
+  payoutBuffer: '2100',
+  payoutCap: '2000',
+  consistency: '50',
+}
+
 let container: HTMLDivElement
 let root: Root
 
@@ -26,6 +42,20 @@ afterEach(() => {
 
 function render() {
   act(() => root.render(<App />))
+}
+
+function seed(values: Record<string, unknown>) {
+  for (const [key, value] of Object.entries(values)) {
+    window.localStorage.setItem(key, JSON.stringify(value))
+  }
+}
+
+/** Skip the walkthrough: day-by-day, payout taken, the workbook's balance. */
+function seedDashboard() {
+  seed({
+    'mpc.setup': { approach: 'dayByDay', payoutTaken: true },
+    'mpc.account': WORKBOOK_ACCOUNT,
+  })
 }
 
 const headline = () => container.querySelector('h1')?.textContent ?? ''
@@ -71,7 +101,190 @@ function click(label: string) {
   act(() => button.click())
 }
 
-describe('App', () => {
+function press(buttonText: string) {
+  const button = Array.from(container.querySelectorAll('button')).find(
+    (b) => b.textContent?.trim() === buttonText,
+  )
+  if (!button) throw new Error(`No button reading "${buttonText}"`)
+  act(() => button.click())
+}
+
+function choose(value: string) {
+  const radio = container.querySelector<HTMLButtonElement>(
+    `button[role="radio"][value="${value}"]`,
+  )
+  if (!radio) throw new Error(`No choice "${value}"`)
+  act(() => radio.click())
+}
+
+/** Walk the point-in-time screens up to the strategy question. */
+function pointInTimeTo(balance: string, largest: string, cumulative: string) {
+  choose('pointInTime')
+  press('Continue')
+  type(byLabel('Current balance'), balance)
+  press('Continue')
+  type(byLabel('Largest profit day'), largest)
+  press('Continue')
+  type(byLabel('Cumulative profit'), cumulative)
+  press('Continue')
+}
+
+describe('walkthrough', () => {
+  it('opens with the approach question on a first visit', () => {
+    render()
+
+    expect(headline()).toBe('How do you want to track this payout?')
+    expect(text()).toContain('Point-in-time')
+    expect(text()).toContain('Cumulative profit, which resets after each payout')
+    expect(text()).toContain('Day-by-day')
+    expect(text()).toContain('Each day’s profit, positive or negative')
+    expect(text()).toContain('only if you’ve already taken a payout')
+
+    const bold = Array.from(container.querySelectorAll('strong')).map(
+      (el) => el.textContent,
+    )
+    expect(bold).toEqual([
+      'which resets after each payout',
+      'only if you’ve already taken a payout',
+    ])
+
+    expect(text()).toContain('Already taken a payout?')
+    expect(text()).toContain('Only include values from after your last payout')
+  })
+
+  it('asks for a choice before moving on', () => {
+    render()
+    press('Continue')
+
+    expect(headline()).toBe('How do you want to track this payout?')
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'Choose an approach to continue.',
+    )
+  })
+
+  it('point-in-time: three numbers reproduce the workbook', () => {
+    render()
+    pointInTimeTo('4758.34', '359', '6.6')
+
+    expect(headline()).toBe('How fast do you want to reach your payout?')
+    choose('conservative')
+    press('Show my plan')
+
+    expect(headline()).toBe('Two more trading days at $355.70 each')
+    expect(text()).toContain('Your numbers')
+    expect(JSON.parse(window.localStorage.getItem('mpc.setup')!)).toMatchObject({
+      approach: 'pointInTime',
+      strategy: 'conservative',
+    })
+  })
+
+  it('rejects a blank amount', () => {
+    render()
+    choose('pointInTime')
+    press('Continue')
+    press('Continue')
+
+    expect(headline()).toBe('What’s your current balance?')
+    expect(text()).toContain('Enter your balance as a dollar amount')
+  })
+
+  it('asks for a strategy before showing the plan', () => {
+    render()
+    pointInTimeTo('4758.34', '359', '6.6')
+    press('Show my plan')
+
+    expect(headline()).toBe('How fast do you want to reach your payout?')
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'Choose conservative or aggressive to continue.',
+    )
+  })
+
+  it('previews both strategies, and aggressive takes the fewest days', () => {
+    render()
+    pointInTimeTo('4758.34', '500', '-1050')
+
+    // Conservative stays under the $500 cap; aggressive goes past it.
+    expect(text()).toContain('Your plan: 5 days at $410.00')
+    expect(text()).toContain('Your plan: 3 days at $1,050.00')
+
+    choose('aggressive')
+    press('Show my plan')
+
+    expect(headline()).toBe('Three more trading days at $1,050.00 each')
+    expect(text()).toContain('$2,100.00') // the lifted profit target
+  })
+
+  it('says when both strategies come out the same', () => {
+    render()
+    pointInTimeTo('4758.34', '359', '6.6')
+
+    expect(text()).toContain('both come out the same')
+  })
+
+  it('day-by-day after a payout: balance, then days', () => {
+    render()
+    choose('dayByDay')
+    press('Continue')
+    choose('yes')
+    press('Continue')
+    type(byLabel('Current balance'), '4758.34')
+    press('Continue')
+
+    expect(headline()).toBe('Log each trading day')
+    addDay('2026-09-08', '359')
+    addDay('2026-09-09', '-212.40')
+    addDay('2026-09-10', '-140')
+    press('Continue')
+    choose('conservative')
+    press('Show my plan')
+
+    expect(headline()).toBe('Two more trading days at $355.70 each')
+    expect(ledgerRows()).toHaveLength(3)
+  })
+
+  it('day-by-day before any payout works the balance out from logged days', () => {
+    render()
+    choose('dayByDay')
+    press('Continue')
+    choose('no')
+    press('Continue')
+
+    // No balance screen on this path.
+    expect(headline()).toBe('Log each trading day')
+    addDay('2026-09-08', '359')
+    addDay('2026-09-09', '-212.40')
+    addDay('2026-09-10', '-140')
+    press('Continue')
+    choose('conservative')
+    press('Show my plan')
+
+    // Balance = +$6.60: E3 = 4100 - 6.6 = 4093.40, I3 = 4086.80, J3 = 2.
+    expect(headline()).toBe('Two more trading days at $2,043.40 each')
+    expect(text()).toContain('Sum of your logged days.')
+  })
+
+  it('skips the walkthrough for data saved before it existed', () => {
+    seed({ 'mpc.days': [{ id: 'a', date: '2026-09-08', amount: '359.00' }] })
+    render()
+
+    expect(headline()).not.toBe('How do you want to track this payout?')
+    expect(ledgerRows()).toHaveLength(1)
+  })
+
+  it('reopens from the dashboard and can be backed out of', () => {
+    seedDashboard()
+    render()
+    press('Change approach')
+    expect(headline()).toBe('How do you want to track this payout?')
+
+    press('Keep my current setup')
+    expect(headline()).toBe('Two more trading days at $250.00 each')
+  })
+})
+
+describe('day-by-day dashboard', () => {
+  beforeEach(seedDashboard)
+
   it('starts with an empty ledger and a plan from the account settings', () => {
     render()
 
@@ -152,11 +365,64 @@ describe('App', () => {
     expect(text()).not.toContain('Infinity')
   })
 
+  it('switches to a derived balance when the payout toggle is turned off', () => {
+    render()
+    addDay('2026-09-08', '359')
+
+    const toggle = container.querySelector<HTMLButtonElement>('#payout-taken')!
+    act(() => toggle.click())
+
+    expect(text()).toContain('Sum of your logged days.')
+    expect(container.querySelector('#account-balance')).toBeNull()
+  })
+
   it('shows no spreadsheet cell references or formulas', () => {
     render()
     addDay('2026-09-08', '359')
 
     expect(text()).not.toMatch(/\b[A-K]3\b/)
     expect(text()).not.toContain('=MAX')
+  })
+})
+
+describe('point-in-time dashboard', () => {
+  function seedPointInTime(largest: string, cumulative: string) {
+    seed({
+      'mpc.setup': {
+        approach: 'pointInTime',
+        payoutTaken: false,
+        strategy: 'conservative',
+      },
+      'mpc.account': WORKBOOK_ACCOUNT,
+      'mpc.snapshot': { largestProfitDay: largest, netProfit: cumulative },
+    })
+  }
+
+  it('recalculates as the three numbers change', () => {
+    seedPointInTime('359', '6.6')
+    render()
+    expect(headline()).toBe('Two more trading days at $355.70 each')
+
+    type(byLabel('Cumulative profit'), '800')
+
+    expect(headline()).toBe('Payout target reached')
+    expect(ledgerRows()).toHaveLength(0)
+  })
+
+  it('switches between conservative and aggressive plans', () => {
+    seedPointInTime('500', '-1050')
+    render()
+    expect(headline()).toBe('Five more trading days at $410.00 each')
+
+    press('Aggressive')
+
+    expect(headline()).toBe('Three more trading days at $1,050.00 each')
+    expect(text()).toContain('lift the profit target from $1,000.00 to $2,100.00')
+    expect(JSON.parse(window.localStorage.getItem('mpc.setup')!).strategy).toBe(
+      'aggressive',
+    )
+
+    press('Conservative')
+    expect(headline()).toBe('Five more trading days at $410.00 each')
   })
 })

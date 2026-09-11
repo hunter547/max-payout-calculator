@@ -118,24 +118,125 @@ export function calculate(inputs: CalcInputs): CalcResults {
   }
 }
 
+/**
+ * Conservative: the spreadsheet's plan. Every planned day stays at or under
+ * today's daily cap (H3 × G3, i.e. the default cap or the largest profit day,
+ * whichever is higher), so the target never moves.
+ *
+ * Aggressive: the fewest days to payout, however big each day has to be.
+ * Days above the current largest day raise the target, and the plan counts
+ * that.
+ */
+export type Strategy = 'conservative' | 'aggressive'
+
+export interface Plan {
+  strategy: Strategy
+  /** Trading days the plan takes; 0 once the target is met. */
+  days: number
+  /** Profit each planned day needs to make. */
+  dailyProfit: number
+  /** Net profit required once the planned days are counted. */
+  requiredProfit: number
+  /** Most one day can make under the consistency rule once the plan is done. */
+  dailyCap: number
+  /** Planned days top the current largest day and lift the target. */
+  raisesTarget: boolean
+}
+
+/**
+ * Fewest equal days of x that reach payout. With F = net profit, D = largest
+ * day, E = minimum target, G = consistency, n days of x must satisfy, on the
+ * final total T = F + n·x:
+ *   T >= E                  (minimum target)
+ *   max(D, x) <= G·T        (consistency, counting the new days)
+ * Together those give x >= I3 / n, plus x·(1 − G·n) <= G·F. Equal days are
+ * optimal: for a given total they keep the largest day as small as possible.
+ * The conservative plan always satisfies these, so n never exceeds J3.
+ */
+function fewestDays(
+  inputs: CalcInputs,
+  results: CalcResults,
+): { days: number; dailyProfit: number } {
+  const F = inputs.currentNetProfit
+  const G = inputs.consistencyRequirement
+  const I = results.remainingProfitNeeded
+
+  for (let n = 1; n <= results.minimumTradingDaysLeft; n++) {
+    const gn = G * n
+    let lo = I / n
+    let hi = Infinity
+
+    if (Math.abs(gn - 1) < 1e-9) {
+      // x·0 <= G·F: only possible without a drawdown to climb out of.
+      if (F < 0) continue
+    } else if (gn < 1) {
+      // x <= G·F / (1 − G·n): needs profit already banked.
+      if (F <= 0) continue
+      hi = (G * F) / (1 - gn)
+    } else if (F < 0) {
+      // x >= G·|F| / (G·n − 1): each day must also cover the drawdown.
+      lo = Math.max(lo, (G * -F) / (gn - 1))
+    }
+
+    if (lo <= hi * (1 + 1e-9)) return { days: n, dailyProfit: lo }
+  }
+
+  return {
+    days: results.minimumTradingDaysLeft,
+    dailyProfit: results.dailyProfitNeeded,
+  }
+}
+
+export function planFor(
+  inputs: CalcInputs,
+  results: CalcResults,
+  strategy: Strategy,
+): Plan {
+  const conservative: Plan = {
+    strategy,
+    days: results.minimumTradingDaysLeft,
+    dailyProfit: results.dailyProfitNeeded,
+    requiredProfit: results.minimumNetProfitRequired,
+    dailyCap: results.maxAllowedSingleDay,
+    raisesTarget: false,
+  }
+  if (strategy === 'conservative' || conservative.days === 0) {
+    return conservative
+  }
+
+  const G = inputs.consistencyRequirement
+  const { days, dailyProfit } = fewestDays(inputs, results)
+  const largest = Math.max(Math.abs(inputs.largestProfitDay), dailyProfit)
+  const requiredProfit = Math.max(results.minimumTargetNetProfit, largest / G)
+
+  return {
+    strategy,
+    days,
+    dailyProfit,
+    requiredProfit,
+    dailyCap: requiredProfit * G,
+    raisesTarget: requiredProfit > results.minimumNetProfitRequired + 1e-9,
+  }
+}
+
 export interface PlanDay {
   day: number
   profitNeeded: number
   cumulativeNetProfit: number
 }
 
-/** The equal-split schedule implied by J3 and K3. */
+/** The day-by-day schedule for a plan: `days` equal days of `dailyProfit`. */
 export function buildPlan(
   inputs: CalcInputs,
-  results: CalcResults,
+  plan: Pick<Plan, 'days' | 'dailyProfit'>,
 ): PlanDay[] {
   const days: PlanDay[] = []
   let running = inputs.currentNetProfit
-  for (let day = 1; day <= results.minimumTradingDaysLeft; day++) {
-    running += results.dailyProfitNeeded
+  for (let day = 1; day <= plan.days; day++) {
+    running += plan.dailyProfit
     days.push({
       day,
-      profitNeeded: results.dailyProfitNeeded,
+      profitNeeded: plan.dailyProfit,
       cumulativeNetProfit: running,
     })
   }

@@ -1,23 +1,32 @@
-import { useMemo } from 'react'
-import { Moon, Sun } from 'lucide-react'
-import { AccountPanel, type AccountKey } from '@/components/AccountPanel'
+import { useMemo, useState, type ReactNode } from 'react'
+import { ArrowLeftRight, Moon, Sun } from 'lucide-react'
+import {
+  AccountPanel,
+  type AccountKey,
+  type BalanceDisplay,
+} from '@/components/AccountPanel'
 import { Ledger } from '@/components/Ledger'
 import { PnlChart, type ChartBar } from '@/components/PnlChart'
+import { SnapshotPanel } from '@/components/SnapshotPanel'
 import { TargetBreakdown } from '@/components/TargetBreakdown'
+import { Walkthrough, type WalkthroughResult } from '@/components/Walkthrough'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { usePersistentState, useTheme } from '@/hooks'
+import { usePersistentState, useTheme, type Theme } from '@/hooks'
 import {
   buildPlan,
   calculate,
-  type CalcInputs,
+  planFor,
   type CalcResults,
+  type Plan,
+  type Strategy,
 } from '@/lib/calc'
 import { formatCurrency } from '@/lib/format'
 import {
@@ -29,15 +38,37 @@ import {
   suggestDate,
   summarize,
   type DayEntry,
-  type LedgerSummary,
 } from '@/lib/ledger'
+import {
+  deriveInputs,
+  legacySetup,
+  type Setup,
+  type SetupDraft,
+  type Snapshot,
+} from '@/lib/setup'
 
-/** Account settings exactly as saved in the workbook. */
-const ACCOUNT_DEFAULTS: Record<AccountKey, string> = {
-  balance: '4758.34',
+/** Account rules exactly as saved in the workbook. */
+const RULE_DEFAULTS = {
   payoutBuffer: '2100',
   payoutCap: '2000',
   consistency: '50',
+} satisfies Omit<Record<AccountKey, string>, 'balance'>
+
+const ACCOUNT_DEFAULTS: Record<AccountKey, string> = {
+  balance: '',
+  ...RULE_DEFAULTS,
+}
+
+const SNAPSHOT_DEFAULTS: Snapshot = { largestProfitDay: '', netProfit: '' }
+
+const EMPTY_DRAFT: SetupDraft = {
+  approach: null,
+  payoutTaken: null,
+  strategy: null,
+  balance: '',
+  largestProfitDay: '',
+  netProfit: '',
+  days: [],
 }
 
 const COUNT_WORDS = [
@@ -60,7 +91,8 @@ function countWord(n: number): string {
 
 function verdict(
   results: CalcResults,
-  summary: LedgerSummary,
+  plan: Plan,
+  netProfit: number,
   consistencyInvalid: boolean,
 ) {
   if (consistencyInvalid) {
@@ -73,50 +105,117 @@ function verdict(
   if (results.targetMet) {
     return {
       title: 'Payout target reached',
-      detail: `Net profit of ${formatCurrency(summary.netProfit)} clears the ${formatCurrency(results.minimumNetProfitRequired)} required.`,
+      detail: `Net profit of ${formatCurrency(netProfit)} clears the ${formatCurrency(results.minimumNetProfitRequired)} required.`,
     }
   }
-  const days = results.minimumTradingDaysLeft
-  const daily = formatCurrency(results.dailyProfitNeeded)
+  const days = plan.days
+  const daily = formatCurrency(plan.dailyProfit)
+  const from = formatCurrency(netProfit)
+  const to = formatCurrency(plan.requiredProfit)
   return {
     title:
       days === 1
         ? `One more trading day at ${daily}`
         : `${countWord(days)} more trading days at ${daily} each`,
-    detail: `That takes net profit from ${formatCurrency(summary.netProfit)} to ${formatCurrency(results.minimumNetProfitRequired)}. Keep each day at or under ${formatCurrency(results.maxAllowedSingleDay)}; a bigger day raises the target.`,
+    detail: plan.raisesTarget
+      ? `That takes net profit from ${from} to ${to}. Days that size lift the profit target from ${formatCurrency(results.minimumNetProfitRequired)} to ${to}, and the plan already counts that.`
+      : `That takes net profit from ${from} to ${to}. Keep each day at or under ${formatCurrency(plan.dailyCap)}; a bigger day raises the target.`,
   }
+}
+
+function AppHeader({
+  theme,
+  onToggleTheme,
+  children,
+}: {
+  theme: Theme
+  onToggleTheme: () => void
+  children?: ReactNode
+}) {
+  const nextTheme = theme === 'dark' ? 'light' : 'dark'
+  return (
+    <header className="flex items-center justify-between gap-4 py-5">
+      <div className="leading-tight">
+        <p className="font-expanded text-base font-bold">
+          Max payout calculator
+        </p>
+        <p className="text-sm text-muted-foreground">
+          MyFundedFutures 50k Builder
+        </p>
+      </div>
+      <div className="flex items-center gap-1">
+        {children}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Switch to ${nextTheme} theme`}
+              onClick={onToggleTheme}
+            >
+              {theme === 'dark' ? <Sun /> : <Moon />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Switch to {nextTheme} theme</TooltipContent>
+        </Tooltip>
+      </div>
+    </header>
+  )
 }
 
 export default function App() {
   const [theme, setTheme] = useTheme()
+  const [setup, setSetup] = usePersistentState<Setup | null>(
+    'mpc.setup',
+    legacySetup,
+  )
   const [account, setAccount] = usePersistentState<Record<AccountKey, string>>(
     'mpc.account',
     ACCOUNT_DEFAULTS,
   )
+  const [snapshot, setSnapshot] = usePersistentState<Snapshot>(
+    'mpc.snapshot',
+    SNAPSHOT_DEFAULTS,
+  )
   const [days, setDays] = usePersistentState<DayEntry[]>('mpc.days', [])
+  const [reconfiguring, setReconfiguring] = useState(false)
+
+  const approach = setup?.approach ?? 'dayByDay'
+  const payoutTaken = setup?.payoutTaken === true
+  const strategy: Strategy = setup?.strategy ?? 'conservative'
+  const balanceEntered = approach === 'pointInTime' || payoutTaken
 
   const sorted = useMemo(() => sortByDate(days), [days])
   const summary = useMemo(() => summarize(sorted), [sorted])
-  const consistency = parseAmount(account.consistency) / 100
+
+  const inputs = useMemo(
+    () =>
+      deriveInputs(
+        {
+          approach,
+          payoutTaken,
+          balance: account.balance,
+          largestProfitDay: snapshot.largestProfitDay,
+          netProfit: snapshot.netProfit,
+        },
+        summary,
+        account,
+      ),
+    [approach, payoutTaken, account, snapshot, summary],
+  )
+  const consistency = inputs.consistencyRequirement
   const consistencyInvalid = consistency <= 0
 
-  const inputs = useMemo<CalcInputs>(
-    () => ({
-      balance: parseAmount(account.balance),
-      payoutBuffer: parseAmount(account.payoutBuffer),
-      payoutCap: parseAmount(account.payoutCap),
-      largestProfitDay: summary.largestProfitDay,
-      currentNetProfit: summary.netProfit,
-      consistencyRequirement: consistency,
-    }),
-    [account, summary, consistency],
+  const results = useMemo(() => calculate(inputs), [inputs])
+  const plan = useMemo(
+    () => planFor(inputs, results, strategy),
+    [inputs, results, strategy],
   )
 
-  const results = useMemo(() => calculate(inputs), [inputs])
-
   const bars = useMemo<ChartBar[]>(() => {
+    const logged = approach === 'dayByDay' ? sorted : []
     let running = 0
-    const recorded: ChartBar[] = sorted.map((entry) => {
+    const recorded: ChartBar[] = logged.map((entry) => {
       const amount = parseAmount(entry.amount)
       running += amount
       return {
@@ -131,8 +230,8 @@ export default function App() {
 
     if (consistencyInvalid) return recorded
 
-    let date = planStartDate(sorted)
-    const planned: ChartBar[] = buildPlan(inputs, results).map((day, i) => {
+    let date = planStartDate(logged)
+    const planned: ChartBar[] = buildPlan(inputs, plan).map((day, i) => {
       if (i > 0) date = nextTradingDate(date)
       return {
         key: `plan-${day.day}`,
@@ -145,10 +244,71 @@ export default function App() {
     })
 
     return [...recorded, ...planned]
-  }, [sorted, summary, inputs, results, consistencyInvalid])
+  }, [approach, sorted, summary, inputs, plan, consistencyInvalid])
 
-  const { title, detail } = verdict(results, summary, consistencyInvalid)
-  const nextTheme = theme === 'dark' ? 'light' : 'dark'
+  const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark')
+
+  function finishWalkthrough(result: WalkthroughResult) {
+    setSetup({
+      approach: result.approach,
+      payoutTaken: result.payoutTaken,
+      strategy: result.strategy,
+    })
+    if (result.approach === 'pointInTime' || result.payoutTaken) {
+      setAccount((prev) => ({ ...prev, balance: result.balance }))
+    }
+    if (result.approach === 'pointInTime') {
+      setSnapshot({
+        largestProfitDay: result.largestProfitDay,
+        netProfit: result.netProfit,
+      })
+    } else {
+      setDays(result.days)
+    }
+    setReconfiguring(false)
+    document.documentElement.scrollTop = 0
+  }
+
+  if (setup === null || reconfiguring) {
+    const initial: SetupDraft = setup
+      ? {
+          approach: setup.approach,
+          payoutTaken: setup.approach === 'dayByDay' ? setup.payoutTaken : null,
+          strategy,
+          balance: account.balance,
+          largestProfitDay: snapshot.largestProfitDay,
+          netProfit: snapshot.netProfit,
+          days,
+        }
+      : EMPTY_DRAFT
+    return (
+      <TooltipProvider delayDuration={200}>
+        <div className="mx-auto max-w-6xl px-4 sm:px-8">
+          <AppHeader theme={theme} onToggleTheme={toggleTheme} />
+          <Walkthrough
+            initial={initial}
+            rules={account}
+            onFinish={finishWalkthrough}
+            onCancel={setup ? () => setReconfiguring(false) : undefined}
+          />
+        </div>
+      </TooltipProvider>
+    )
+  }
+
+  const { title, detail } = verdict(
+    results,
+    plan,
+    inputs.currentNetProfit,
+    consistencyInvalid,
+  )
+
+  const balanceDisplay: BalanceDisplay =
+    approach === 'pointInTime'
+      ? { kind: 'hidden' }
+      : balanceEntered
+        ? { kind: 'input' }
+        : { kind: 'derived', value: summary.netProfit }
 
   function clearDays() {
     const count = days.length
@@ -161,29 +321,17 @@ export default function App() {
   return (
     <TooltipProvider delayDuration={200}>
       <div className="mx-auto max-w-6xl px-4 pb-16 sm:px-8">
-        <header className="flex items-center justify-between gap-4 py-5">
-          <div className="leading-tight">
-            <p className="font-expanded text-base font-bold">
-              Max payout calculator
-            </p>
-            <p className="text-sm text-muted-foreground">
-              MyFundedFutures 50k Builder
-            </p>
-          </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={`Switch to ${nextTheme} theme`}
-                onClick={() => setTheme(nextTheme)}
-              >
-                {theme === 'dark' ? <Sun /> : <Moon />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Switch to {nextTheme} theme</TooltipContent>
-          </Tooltip>
-        </header>
+        <AppHeader theme={theme} onToggleTheme={toggleTheme}>
+          {/* Icon-only on phones so the app name keeps its two lines. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setReconfiguring(true)}
+          >
+            <ArrowLeftRight />
+            <span className="sr-only sm:not-sr-only">Change approach</span>
+          </Button>
+        </AppHeader>
 
         <main>
           <section aria-labelledby="verdict" className="pt-8 sm:pt-14">
@@ -197,31 +345,73 @@ export default function App() {
               {detail}
             </p>
 
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <span id="strategy-label" className="text-sm font-medium">
+                Plan
+              </span>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                value={strategy}
+                onValueChange={(value) => {
+                  if (value) setSetup({ ...setup, strategy: value as Strategy })
+                }}
+                aria-labelledby="strategy-label"
+              >
+                <ToggleGroupItem
+                  value="conservative"
+                  className="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                >
+                  Conservative
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="aggressive"
+                  className="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                >
+                  Aggressive
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+
             <PnlChart
               bars={bars}
-              cap={consistencyInvalid ? 0 : results.maxAllowedSingleDay}
-              className="mt-10 rounded-xl border bg-card px-2 pt-3 pb-4 sm:px-4"
+              cap={consistencyInvalid ? 0 : plan.dailyCap}
+              className="mt-5 rounded-xl border bg-card px-2 pt-3 pb-4 sm:px-4"
             />
           </section>
 
           <div className="mt-14 grid grid-cols-1 gap-14 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-16">
-            <Ledger
-              entries={sorted}
-              summary={summary}
-              suggestedDate={suggestDate(sorted)}
-              onAdd={(entry) =>
-                setDays((prev) => [...prev, { id: newId(), ...entry }])
-              }
-              onUpdate={(id, patch) =>
-                setDays((prev) =>
-                  prev.map((d) => (d.id === id ? { ...d, ...patch } : d)),
-                )
-              }
-              onRemove={(id) =>
-                setDays((prev) => prev.filter((d) => d.id !== id))
-              }
-              onClear={clearDays}
-            />
+            {approach === 'dayByDay' ? (
+              <Ledger
+                entries={sorted}
+                summary={summary}
+                suggestedDate={suggestDate(sorted)}
+                onAdd={(entry) =>
+                  setDays((prev) => [...prev, { id: newId(), ...entry }])
+                }
+                onUpdate={(id, patch) =>
+                  setDays((prev) =>
+                    prev.map((d) => (d.id === id ? { ...d, ...patch } : d)),
+                  )
+                }
+                onRemove={(id) =>
+                  setDays((prev) => prev.filter((d) => d.id !== id))
+                }
+                onClear={clearDays}
+              />
+            ) : (
+              <SnapshotPanel
+                balance={account.balance}
+                snapshot={snapshot}
+                onBalanceChange={(v) =>
+                  setAccount((prev) => ({ ...prev, balance: v }))
+                }
+                onSnapshotChange={(patch) =>
+                  setSnapshot((prev) => ({ ...prev, ...patch }))
+                }
+              />
+            )}
 
             <aside className="grid content-start gap-10">
               <AccountPanel
@@ -229,13 +419,28 @@ export default function App() {
                 onChange={(key, value) =>
                   setAccount((prev) => ({ ...prev, [key]: value }))
                 }
-                onReset={() => setAccount(ACCOUNT_DEFAULTS)}
+                onRestoreRules={() =>
+                  setAccount((prev) => ({ ...prev, ...RULE_DEFAULTS }))
+                }
                 consistencyInvalid={consistencyInvalid}
+                balance={balanceDisplay}
+                payoutTaken={
+                  approach === 'dayByDay'
+                    ? {
+                        checked: balanceEntered,
+                        onChange: (checked) =>
+                          setSetup({ ...setup, payoutTaken: checked }),
+                      }
+                    : undefined
+                }
               />
               <Separator />
               <TargetBreakdown
                 results={results}
-                summary={summary}
+                plan={plan}
+                largestProfitDay={inputs.largestProfitDay}
+                netProfit={inputs.currentNetProfit}
+                tradingDays={approach === 'dayByDay' ? summary.tradingDays : null}
                 consistency={consistency}
                 consistencyInvalid={consistencyInvalid}
               />

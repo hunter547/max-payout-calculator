@@ -1,14 +1,17 @@
-import { MINIMUM_PAYOUT_FLOOR, type CalcResults } from '@/lib/calc'
+import { MINIMUM_PAYOUT_FLOOR, type CalcResults, type Plan } from '@/lib/calc'
 import {
   formatCurrency,
   formatPercent,
   formatSignedCurrency,
 } from '@/lib/format'
-import type { LedgerSummary } from '@/lib/ledger'
 
 interface TargetBreakdownProps {
   results: CalcResults
-  summary: LedgerSummary
+  plan: Plan
+  largestProfitDay: number
+  netProfit: number
+  /** Null in point-in-time mode, where days aren't logged. */
+  tradingDays: number | null
   /** Fraction, 0.5 = 50%. */
   consistency: number
   consistencyInvalid: boolean
@@ -16,12 +19,21 @@ interface TargetBreakdownProps {
 
 export function TargetBreakdown({
   results,
-  summary,
+  plan,
+  largestProfitDay,
+  netProfit,
+  tradingDays,
   consistency,
   consistencyInvalid,
 }: TargetBreakdownProps) {
   const consistencyDriven =
     results.minimumNetProfitRequired > results.minimumTargetNetProfit
+
+  const requiredNote = plan.raisesTarget
+    ? `Planned days of ${formatCurrency(plan.dailyProfit)} can be at most ${formatPercent(consistency)} of net profit, which lifts the target from ${formatCurrency(results.minimumNetProfitRequired)}.`
+    : consistencyDriven
+      ? `Your ${formatCurrency(Math.abs(largestProfitDay))} day can be at most ${formatPercent(consistency)} of net profit.`
+      : 'Same as the minimum target.'
 
   const rows: { label: string; value: string; note?: string }[] = [
     {
@@ -34,27 +46,28 @@ export function TargetBreakdown({
     },
     {
       label: 'Profit required',
-      value: formatCurrency(results.minimumNetProfitRequired),
-      note: consistencyDriven
-        ? `Your ${formatCurrency(summary.largestProfitDay)} day can be at most ${formatPercent(consistency)} of net profit.`
-        : 'Same as the minimum target.',
+      value: formatCurrency(plan.requiredProfit),
+      note: requiredNote,
     },
     {
       label: 'Net profit so far',
-      value: formatSignedCurrency(summary.netProfit),
-      note: `${summary.tradingDays} trading ${summary.tradingDays === 1 ? 'day' : 'days'} since the last payout.`,
+      value: formatSignedCurrency(netProfit),
+      note:
+        tradingDays === null
+          ? 'Since the last payout.'
+          : `${tradingDays} trading ${tradingDays === 1 ? 'day' : 'days'} since the last payout.`,
     },
     {
       label: 'Still needed',
-      value: formatCurrency(Math.max(0, results.remainingProfitNeeded)),
+      value: formatCurrency(Math.max(0, plan.requiredProfit - netProfit)),
       note: results.targetMet ? 'Nothing left to make.' : undefined,
     },
     {
       label: 'Daily cap',
-      value: consistencyInvalid
-        ? '—'
-        : formatCurrency(results.maxAllowedSingleDay),
-      note: 'A bigger day raises the profit required.',
+      value: consistencyInvalid ? '—' : formatCurrency(plan.dailyCap),
+      note: plan.raisesTarget
+        ? 'Set by your planned days, the new largest day.'
+        : 'A bigger day raises the profit required.',
     },
   ]
 
