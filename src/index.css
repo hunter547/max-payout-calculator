@@ -1,0 +1,180 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/archivo/wdth.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  Palette — cool, not cream; ink, not near-black.
+    Fog       #E9EDF0  page
+    Sheet     #F7F9FA  chart plate, popovers
+    Graphite  #18212B  ink
+    Slate     #56636F  secondary ink
+    Cobalt    #2F4BD8  the daily cap, planned days, primary actions
+    Jade      #177E5B  profit days
+    Signal    #C23B32  loss days, errors
+  Chart hues are validated with the dataviz palette checker in both modes.
+*/
+
+@theme {
+  --font-sans: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* App-specific roles */
+  --color-profit: var(--profit);
+  --color-loss: var(--loss);
+  --color-plan: var(--plan);
+  --color-grid: var(--grid);
+  --color-axis: var(--axis);
+}
+
+:root {
+  --radius: 0.5rem;
+
+  --background: #e9edf0;
+  --foreground: #18212b;
+  --card: #f7f9fa;
+  --card-foreground: #18212b;
+  --popover: #f7f9fa;
+  --popover-foreground: #18212b;
+  --primary: #2f4bd8;
+  --primary-foreground: #ffffff;
+  --secondary: #dfe5ea;
+  --secondary-foreground: #18212b;
+  --muted: #dfe5ea;
+  --muted-foreground: #56636f;
+  --accent: #dbe2e9;
+  --accent-foreground: #18212b;
+  --destructive: #c23b32;
+  --border: #cbd3da;
+  --input: #bcc6cf;
+  --ring: #2f4bd8;
+
+  --profit: #177e5b;
+  --loss: #c23b32;
+  --plan: #2f4bd8;
+  --grid: #dde3e8;
+  --axis: #9aa6b1;
+
+  --chart-1: var(--plan);
+  --chart-2: var(--profit);
+  --chart-3: var(--loss);
+  --chart-4: #56636f;
+  --chart-5: #9aa6b1;
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+.dark {
+  --background: #0e141a;
+  --foreground: #e6ecf1;
+  --card: #161e26;
+  --card-foreground: #e6ecf1;
+  --popover: #1b2530;
+  --popover-foreground: #e6ecf1;
+  --primary: #7488f5;
+  --primary-foreground: #0e141a;
+  --secondary: #1f2a35;
+  --secondary-foreground: #e6ecf1;
+  --muted: #1b2530;
+  --muted-foreground: #93a1ad;
+  --accent: #1f2a35;
+  --accent-foreground: #e6ecf1;
+  --destructive: #d2463c;
+  --border: #26313c;
+  --input: #2e3a46;
+  --ring: #7488f5;
+
+  /* Profit is the lighter step here and loss the deeper one — the reverse
+     of light mode — so the pair stays apart under protanopia. */
+  --profit: #2daa80;
+  --loss: #d2463c;
+  --plan: #7488f5;
+  --grid: #222c36;
+  --axis: #3a4754;
+}
+
+/* Archivo's width axis is the type system: expanded for headings, condensed
+   and tabular for money. */
+@utility font-display {
+  font-stretch: 116%;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+@utility font-expanded {
+  font-stretch: 112%;
+  letter-spacing: -0.01em;
+}
+
+@utility font-figure {
+  font-stretch: 88%;
+  font-variant-numeric: tabular-nums;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

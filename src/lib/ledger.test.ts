@@ -1,0 +1,98 @@
+import { describe, expect, it } from 'vitest'
+import {
+  isAmount,
+  nextTradingDate,
+  parseAmount,
+  planStartDate,
+  sortByDate,
+  suggestDate,
+  summarize,
+  type DayEntry,
+} from './ledger'
+
+const day = (id: string, date: string, amount: string): DayEntry => ({
+  id,
+  date,
+  amount,
+})
+
+describe('summarize', () => {
+  it('derives the spreadsheet inputs from daily entries', () => {
+    // A history that reproduces the workbook's D3=359 and F3=6.6.
+    const s = summarize([
+      day('a', '2026-09-08', '359'),
+      day('b', '2026-09-09', '-212.40'),
+      day('c', '2026-09-10', '-140'),
+    ])
+
+    expect(s.largestProfitDay).toBe(359)
+    expect(s.largestEntryId).toBe('a')
+    expect(s.netProfit).toBe(6.6)
+    expect(s.tradingDays).toBe(3)
+    expect(s.winningDays).toBe(1)
+    expect(s.losingDays).toBe(2)
+  })
+
+  it('reports no largest day until there is a winning day', () => {
+    const s = summarize([day('a', '2026-09-08', '-50')])
+    expect(s.largestProfitDay).toBe(0)
+    expect(s.largestEntryId).toBeNull()
+    expect(s.netProfit).toBe(-50)
+  })
+
+  it('handles an empty ledger', () => {
+    const s = summarize([])
+    expect(s).toMatchObject({
+      largestProfitDay: 0,
+      largestEntryId: null,
+      netProfit: 0,
+      tradingDays: 0,
+    })
+  })
+
+  it('treats half-typed amounts as zero', () => {
+    const s = summarize([day('a', '2026-09-08', '-'), day('b', '2026-09-09', '')])
+    expect(s.netProfit).toBe(0)
+    expect(s.tradingDays).toBe(2)
+  })
+})
+
+describe('dates', () => {
+  it('skips weekends when stepping to the next trading day', () => {
+    expect(nextTradingDate('2026-09-10')).toBe('2026-09-11') // Thu -> Fri
+    expect(nextTradingDate('2026-09-11')).toBe('2026-09-14') // Fri -> Mon
+  })
+
+  it('suggests the trading day after the latest entry', () => {
+    const entries = [day('a', '2026-09-10', '1'), day('b', '2026-09-08', '1')]
+    expect(suggestDate(entries)).toBe('2026-09-11')
+  })
+
+  it('starts the plan on the next trading day, never in the past', () => {
+    // Latest entry is well before "today": the plan starts today.
+    expect(planStartDate([day('a', '2026-09-01', '1')], '2026-09-10')).toBe(
+      '2026-09-10',
+    )
+    // Latest entry is today: the plan starts on the next trading day.
+    expect(planStartDate([day('a', '2026-09-11', '1')], '2026-09-11')).toBe(
+      '2026-09-14',
+    )
+    // Empty ledger on a Saturday: roll forward to Monday.
+    expect(planStartDate([], '2026-09-12')).toBe('2026-09-14')
+  })
+
+  it('accepts pasted formatting in amounts', () => {
+    expect(isAmount('$1,200.50')).toBe(true)
+    expect(isAmount('− 50')).toBe(true)
+    expect(isAmount('-')).toBe(false)
+    expect(isAmount('abc')).toBe(false)
+    expect(parseAmount('$1,200.50')).toBe(1200.5)
+    expect(parseAmount('−50')).toBe(-50)
+  })
+
+  it('sorts entries chronologically without mutating the input', () => {
+    const entries = [day('b', '2026-09-10', '1'), day('a', '2026-09-08', '1')]
+    expect(sortByDate(entries).map((e) => e.id)).toEqual(['a', 'b'])
+    expect(entries[0].id).toBe('b')
+  })
+})
