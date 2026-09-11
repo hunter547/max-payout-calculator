@@ -449,11 +449,7 @@ export default function App() {
         </main>
 
         <footer className="mt-20 border-t pt-5 text-sm text-muted-foreground">
-          Calculations match{' '}
-          <span className="text-foreground">
-            MyFundedFutrures 50k Builder Max Payout Calculator.xlsx
-          </span>
-          . Your entries are saved in this browser only.
+          Your entries are saved in this browser only.
         </footer>
       </div>
     </TooltipProvider>

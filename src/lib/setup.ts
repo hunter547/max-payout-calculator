@@ -44,11 +44,8 @@ export type StepId =
   | 'days'
   | 'strategy'
 
-/**
- * The spreadsheet's Balance is measured from the $50,000 start: its formula
- * compares it against buffer + cap ($4,100), and its saved value is 4,758.34.
- */
-export const BALANCE_HINT = 'Your profit above the $50,000 starting balance.'
+/** A funded account's balance starts at $0, which is what the formula expects. */
+export const BALANCE_HINT = 'Your funded account balance, which starts at $0.'
 
 export function stepsFor(
   draft: Pick<SetupDraft, 'approach' | 'payoutTaken'>,

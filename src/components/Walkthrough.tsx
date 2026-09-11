@@ -117,7 +117,7 @@ function stepCopy(step: StepId, payoutTaken: boolean | null) {
     case 'balance':
       return {
         title: 'What’s your current balance?',
-        lead: 'Enter your profit above the $50,000 starting balance. An account showing $54,758.34 means 4,758.34.',
+        lead: 'Your funded account balance, which starts at $0 when the account is funded.',
       }
     case 'largest':
       return {
@@ -134,7 +134,7 @@ function stepCopy(step: StepId, payoutTaken: boolean | null) {
         title: 'Log each trading day',
         lead: payoutTaken
           ? 'Add every day since your last payout, losing days too. You can add more later.'
-          : 'Add every day since the account started, losing days too. Your balance is worked out from these, and you can add more later.',
+          : 'Add every day since the account was funded, losing days too. Your balance is worked out from these, and you can add more later.',
       }
     case 'strategy':
       return {

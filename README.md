@@ -49,11 +49,10 @@ and opens as day-by-day with the balance you'd entered.
 
 ### About the balance
 
-The spreadsheet's Balance is measured from the $50,000 starting balance: its
-formula compares it against payout buffer plus payout cap ($4,100), and its
-saved value is 4,758.34. The app asks for it the same way. Before any payout,
-that balance is the sum of every day since the account started, which is how
-day-by-day works it out.
+Once an account is funded, its balance starts at $0, and that's the balance the
+app asks for. The spreadsheet's formula compares it against payout buffer plus
+payout cap ($4,100). Before any payout, the balance is the sum of every day
+since the account was funded, which is how day-by-day works it out.
 
 ## The dashboard
 
