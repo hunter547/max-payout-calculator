@@ -74,3 +74,30 @@ export function formatLongDate(iso: string): string {
   const date = parseISODate(iso)
   return date ? longDate.format(date) : 'No date'
 }
+
+const COUNT_WORDS = [
+  'zero',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+]
+
+/** The highest count the headline spells out; past it, it shows digits. */
+export const MAX_SPELLED_COUNT = COUNT_WORDS.length - 1
+
+/** "Three" for 3, "12" for 12: small counts read better as words. */
+export function countWord(n: number): string {
+  const word = n <= MAX_SPELLED_COUNT ? COUNT_WORDS[n] : String(n)
+  return word.charAt(0).toUpperCase() + word.slice(1)
+}
+
+/** "3 days at $1,050.00" */
+export function formatPlan(days: number, dailyProfit: number): string {
+  return `${days} ${days === 1 ? 'day' : 'days'} at ${formatCurrency(dailyProfit)}`
+}

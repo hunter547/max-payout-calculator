@@ -1,7 +1,29 @@
-import type { CalcInputs, Strategy } from '@/lib/calc'
-import { parseAmount, type DayEntry, type LedgerSummary } from '@/lib/ledger'
+import {
+  curatedPlan,
+  planFor,
+  type CalcInputs,
+  type CalcResults,
+  type CuratedChoice,
+  type Plan,
+  type Strategy,
+} from '@/lib/calc'
+import {
+  isAmount,
+  parseAmount,
+  type DayEntry,
+  type LedgerSummary,
+} from '@/lib/ledger'
 
 export type Approach = 'pointInTime' | 'dayByDay'
+
+/** The curated plan as typed: a day count or a daily cap. */
+export interface CuratedDraft {
+  mode: 'days' | 'cap'
+  days: number | null
+  cap: string
+}
+
+export const CURATED_DEFAULT: CuratedDraft = { mode: 'days', days: null, cap: '' }
 
 export interface Setup {
   approach: Approach
@@ -9,6 +31,7 @@ export interface Setup {
   payoutTaken: boolean
   /** Missing on setups saved before strategies existed; read as conservative. */
   strategy?: Strategy
+  curated?: CuratedDraft
 }
 
 /** Point-in-time numbers, copied from the trader's account. */
@@ -29,6 +52,7 @@ export interface SetupDraft {
   approach: Approach | null
   payoutTaken: boolean | null
   strategy: Strategy | null
+  curated: CuratedDraft
   balance: string
   largestProfitDay: string
   netProfit: string
@@ -77,7 +101,7 @@ export function deriveInputs(
   const pointInTime = source.approach === 'pointInTime'
   const balanceEntered = pointInTime || source.payoutTaken
   return {
-    // Before any payout, the balance above the start is everything logged.
+    // Before any payout, the balance since funding is everything logged.
     balance: balanceEntered ? parseAmount(source.balance) : summary.netProfit,
     payoutBuffer: parseAmount(rules.payoutBuffer),
     payoutCap: parseAmount(rules.payoutCap),
@@ -89,6 +113,30 @@ export function deriveInputs(
       : summary.netProfit,
     consistencyRequirement: parseAmount(rules.consistency) / 100,
   }
+}
+
+/** The typed curated plan as a calculator choice, or null if incomplete. */
+export function toCuratedChoice(draft: CuratedDraft): CuratedChoice | null {
+  if (draft.mode === 'days') {
+    return draft.days && draft.days > 0 ? { mode: 'days', days: draft.days } : null
+  }
+  const cap = parseAmount(draft.cap)
+  return isAmount(draft.cap) && cap > 0 ? { mode: 'cap', cap } : null
+}
+
+/**
+ * The plan for a strategy. Null for curated when the choice is incomplete or
+ * its cap would take more than a year of trading days.
+ */
+export function resolvePlan(
+  inputs: CalcInputs,
+  results: CalcResults,
+  strategy: Strategy,
+  curated: CuratedDraft,
+): Plan | null {
+  if (strategy !== 'curated') return planFor(inputs, results, strategy)
+  const choice = toCuratedChoice(curated)
+  return choice ? curatedPlan(inputs, results, choice) : null
 }
 
 /**

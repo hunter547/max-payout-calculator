@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { summarize } from './ledger'
-import { deriveInputs, legacySetup, stepsFor } from './setup'
+import { deriveInputs, legacySetup, stepsFor, toCuratedChoice } from './setup'
 
 const RULES = { payoutBuffer: '2100', payoutCap: '2000', consistency: '50' }
 
@@ -111,6 +111,26 @@ describe('legacySetup', () => {
       approach: 'dayByDay',
       payoutTaken: true,
       strategy: 'conservative',
+    })
+  })
+})
+
+describe('toCuratedChoice', () => {
+  it('needs a day count in days mode', () => {
+    expect(toCuratedChoice({ mode: 'days', days: null, cap: '' })).toBeNull()
+    expect(toCuratedChoice({ mode: 'days', days: 4, cap: '' })).toEqual({
+      mode: 'days',
+      days: 4,
+    })
+  })
+
+  it('needs a positive dollar amount in cap mode', () => {
+    expect(toCuratedChoice({ mode: 'cap', days: 4, cap: '' })).toBeNull()
+    expect(toCuratedChoice({ mode: 'cap', days: 4, cap: '0' })).toBeNull()
+    expect(toCuratedChoice({ mode: 'cap', days: 4, cap: 'abc' })).toBeNull()
+    expect(toCuratedChoice({ mode: 'cap', days: null, cap: '$700' })).toEqual({
+      mode: 'cap',
+      cap: 700,
     })
   })
 })

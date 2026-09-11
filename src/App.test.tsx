@@ -195,7 +195,7 @@ describe('walkthrough', () => {
 
     expect(headline()).toBe('How fast do you want to reach your payout?')
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      'Choose conservative or aggressive to continue.',
+      'Choose conservative, aggressive, or curated to continue.',
     )
   })
 
@@ -218,7 +218,63 @@ describe('walkthrough', () => {
     render()
     pointInTimeTo('4758.34', '359', '6.6')
 
-    expect(text()).toContain('both come out the same')
+    expect(text()).toContain('conservative and aggressive come out the same')
+  })
+
+  it('curated by days: offers the fastest count up to nine', () => {
+    render()
+    pointInTimeTo('4758.34', '500', '-1050')
+    choose('curated')
+
+    // A plan is required before finishing.
+    press('Show my plan')
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'Pick how many trading days you want.',
+    )
+
+    // Aggressive needs 3 days here, so 3 is the lowest offered.
+    const offered = Array.from(
+      container.querySelectorAll('[aria-labelledby="walkthrough-curated-days-label"] button'),
+    ).map((b) => b.textContent)
+    expect(offered).toEqual(['3', '4', '5', '6', '7', '8', '9'])
+
+    press('4')
+    expect(text()).toContain('That’s 4 days at $525.00 each.')
+    press('Show my plan')
+
+    expect(headline()).toBe('Four more trading days at $525.00 each')
+    expect(JSON.parse(window.localStorage.getItem('mpc.setup')!)).toMatchObject({
+      strategy: 'curated',
+      curated: { mode: 'days', days: 4 },
+    })
+  })
+
+  it('curated by cap: the cap sets the number of days', () => {
+    render()
+    pointInTimeTo('4758.34', '500', '-1050')
+    choose('curated')
+    press('Daily cap')
+    type(byLabel('Daily cap'), '700')
+
+    expect(text()).toContain('That’s 4 days at $525.00 each.')
+    press('Show my plan')
+
+    expect(headline()).toBe('Four more trading days at $525.00 each')
+    expect(text()).toContain('Each day stays at or under your $700.00 cap.')
+  })
+
+  it('curated by cap: turns away a cap that would take over a year', () => {
+    render()
+    pointInTimeTo('4758.34', '500', '-1050')
+    choose('curated')
+    press('Daily cap')
+    type(byLabel('Daily cap'), '1')
+    press('Show my plan')
+
+    expect(headline()).toBe('How fast do you want to reach your payout?')
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'That cap would take more than 252 trading days. Raise it.',
+    )
   })
 
   it('day-by-day after a payout: balance, then days', () => {
@@ -355,8 +411,43 @@ describe('day-by-day dashboard', () => {
     expect(text()).not.toContain('Infinity')
   })
 
+  it('locks the account settings until the lock is clicked', () => {
+    render()
+    const fields = [
+      'Current balance',
+      'Payout buffer',
+      'Payout cap',
+      'Consistency rule',
+    ].map(byLabel)
+    const restore = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Restore defaults',
+    )!
+
+    expect(fields.every((f) => f.disabled)).toBe(true)
+    expect(restore.disabled).toBe(true)
+
+    click('Unlock account settings')
+    expect(fields.some((f) => f.disabled)).toBe(false)
+    expect(restore.disabled).toBe(false)
+    type(byLabel('Payout cap'), '1500')
+    expect(byLabel('Payout cap').value).toBe('1500')
+
+    click('Lock account settings')
+    expect(fields.every((f) => f.disabled)).toBe(true)
+  })
+
+  it('leaves logging days open while the account is locked', () => {
+    render()
+    addDay('2026-09-08', '359')
+
+    expect(byLabel('Payout cap').disabled).toBe(true)
+    expect(byLabel('P&L on Sep 8').disabled).toBe(false)
+    expect(ledgerRows()).toHaveLength(1)
+  })
+
   it('flags a zero consistency rule instead of showing #DIV/0!', () => {
     render()
+    click('Unlock account settings')
     type(byLabel('Consistency rule'), '0')
 
     expect(headline()).toBe('Set a consistency rule above 0%')
@@ -403,6 +494,12 @@ describe('point-in-time dashboard', () => {
     render()
     expect(headline()).toBe('Two more trading days at $355.70 each')
 
+    // Balance moved in with the locked account settings; the other two
+    // point-in-time numbers stay editable.
+    expect(byLabel('Current balance').disabled).toBe(true)
+    expect(byLabel('Largest profit day').disabled).toBe(false)
+    expect(byLabel('Cumulative profit').disabled).toBe(false)
+
     type(byLabel('Cumulative profit'), '800')
 
     expect(headline()).toBe('Payout target reached')
@@ -424,5 +521,24 @@ describe('point-in-time dashboard', () => {
 
     press('Conservative')
     expect(headline()).toBe('Five more trading days at $410.00 each')
+  })
+
+  it('curated on the dashboard: pick days or set a cap', () => {
+    seedPointInTime('500', '-1050')
+    render()
+
+    // Switching to curated starts from the conservative day count.
+    press('Curated')
+    expect(headline()).toBe('Five more trading days at $410.00 each')
+
+    press('9')
+    expect(headline()).toBe('Nine more trading days at $227.78 each')
+
+    press('Daily cap')
+    expect(headline()).toBe('Set your curated plan')
+
+    type(byLabel('Daily cap'), '700')
+    expect(headline()).toBe('Four more trading days at $525.00 each')
+    expect(text()).toContain('Each day stays at or under your $700.00 cap.')
   })
 })

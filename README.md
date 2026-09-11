@@ -37,8 +37,8 @@ want to track this payout?
    is worked out from your logged days.
 3. Each day's profit or loss, positive or negative. You can add more later.
 
-Both paths end on one last question: **Conservative or Aggressive?** Each card
-previews the plan it would give you for the numbers you just entered.
+Both paths end on one last question: **Conservative, Aggressive, or Curated?**
+Each card previews the plan it would give you for the numbers you just entered.
 
 "Show my plan" on the last screen saves everything and opens the dashboard.
 "Change approach" in the dashboard header reopens the walkthrough, prefilled,
@@ -60,9 +60,12 @@ since the account was funded, which is how day-by-day works it out.
   the daily cap. Logged days are solid columns; planned days are outlined.
 - **Day-by-day:** a ledger of each day's P&L, edited inline. An "I've taken a
   payout" switch chooses between an entered and a derived balance.
-- **Point-in-time:** "Your numbers" holds the three values from the walkthrough.
-- **Account:** payout buffer, payout cap, and consistency rule, defaulting to the
-  spreadsheet's values.
+- **Point-in-time:** "Your numbers" holds your largest profit day and cumulative
+  profit.
+- **Account:** current balance, payout buffer, payout cap, and consistency rule
+  (the rules default to the spreadsheet's values). These are locked on every
+  visit so a stray keystroke can't change them; click the lock icon next to
+  "Account" to edit, and again to lock. "Restore defaults" is locked with them.
 - **How the target is set:** which rule is driving the profit you need.
 
 Largest profit day and cumulative profit map to the sheet like this:
@@ -97,7 +100,7 @@ planned day stays under it too. Make a bigger day than the cap and `H3` rises.
 [`src/lib/ledger.ts`](src/lib/ledger.ts) turns logged days into `D3` and `F3`,
 and dates the planned days on the next weekdays, starting no earlier than today.
 
-### Conservative and aggressive plans
+### Conservative, aggressive, and curated plans
 
 Switch between them with the **Plan** toggle above the chart.
 
@@ -120,6 +123,20 @@ Example: at −$1,050 cumulative profit with a $500 largest day and a 50% rule,
 conservative takes 5 days of $410; aggressive takes 3 days of $1,050, lifting
 the profit target from $1,000 to $2,100. With profit already banked the two
 usually agree, and the walkthrough says so when they do.
+
+**Curated** lets the trader set the plan one of two ways (`curatedPlan` in
+`calc.ts`):
+
+- **Number of days**, from the aggressive count up to 9, the highest count the
+  headline spells out. The plan is that many equal days at the smallest amount
+  that still pays out. Once some day count can pay out, every larger one can,
+  so every option offered is valid. In the example above, 4 days is $525 a day
+  and 9 days is $227.78.
+- **Daily cap**, which replaces the default and largest-day cap. The plan is the
+  fewest days whose equal daily amount stays at or under it: a $700 cap gives
+  4 days of $525. At the conservative cap this is exactly the conservative
+  plan. A cap that would take more than 252 trading days (a year) is turned
+  away.
 
 ### Deliberate differences from the spreadsheet
 
@@ -175,7 +192,9 @@ in `src/lib/utils.ts`. If the CLI installs `cn` into `package.json`, remove it.
   saved inputs, plus the branch and edge cases above. The aggressive plan is
   checked across a sweep of balances, drawdowns, largest days, and consistency
   rules: it always pays out, is never slower than conservative, and a brute-force
-  search confirms no daily amount gets there a day sooner.
+  search confirms no daily amount gets there a day sooner. Across the same
+  sweep, curated reproduces conservative at the conservative cap, and every
+  day count from the fastest up pays out without asking for more per day.
 - `src/lib/ledger.test.ts`: largest day and net profit from daily entries,
   pasted formatting like `$1,200`, and weekend-aware plan dates.
 - `src/lib/setup.test.ts`: which walkthrough screens each path shows, and
@@ -184,6 +203,22 @@ in `src/lib/utils.ts`. If the CLI installs `cn` into `package.json`, remove it.
   to the workbook's `$355.70` a day, covers the no-payout path's derived
   balance, validation, reopening and cancelling, and both dashboards' editing,
   removing, invalid input, and target-met states.
+
+## Link previews
+
+Pasting the site's link into a chat app shows `public/og-image.png`
+(1200×630), set by the Open Graph tags in `index.html`.
+
+The image URL is built from the deployed address in `.env`:
+
+```bash
+VITE_SITE_URL=https://max-payout-calculator.netlify.app
+```
+
+Many apps, including WhatsApp, Facebook, and LinkedIn, only load the image from
+a full URL, so update this if the site moves, then rebuild. Apps cache
+previews, so after changing the image, re-scrape the link in the platform's
+debugger (for example Facebook's Sharing Debugger) to see the update.
 
 ## Node version
 

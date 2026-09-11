@@ -15,6 +15,7 @@ interface MoneyFieldProps {
   size?: 'default' | 'lg'
   /** Keep the label for screen readers when a heading already asks the question. */
   hideLabel?: boolean
+  disabled?: boolean
   inputRef?: Ref<HTMLInputElement>
   onEnter?: () => void
 }
@@ -30,6 +31,7 @@ export function MoneyField({
   unit = '$',
   size = 'default',
   hideLabel = false,
+  disabled = false,
   inputRef,
   onEnter,
 }: MoneyFieldProps) {
@@ -43,7 +45,8 @@ export function MoneyField({
       <Label htmlFor={id} className={cn(hideLabel && 'sr-only')}>
         {label}
       </Label>
-      <div className="relative">
+      {/* Dim the whole control from here, so the $ / % fades with the value. */}
+      <div className={cn('relative', disabled && 'cursor-not-allowed opacity-50')}>
         <span
           aria-hidden="true"
           className={cn(
@@ -66,6 +69,7 @@ export function MoneyField({
           inputMode="decimal"
           autoComplete="off"
           value={value}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && onEnter) {
@@ -76,7 +80,8 @@ export function MoneyField({
           aria-invalid={invalid || error ? true : undefined}
           aria-describedby={describedBy}
           className={cn(
-            'font-figure',
+            // The wrapper does the dimming; opacity here would double it.
+            'font-figure disabled:bg-muted disabled:opacity-100',
             lg && 'h-16 text-3xl font-semibold md:text-3xl',
             unit === '$' ? (lg ? 'pl-10' : 'pl-7') : lg ? 'pr-12' : 'pr-8',
           )}

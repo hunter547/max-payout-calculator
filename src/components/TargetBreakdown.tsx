@@ -65,9 +65,11 @@ export function TargetBreakdown({
     {
       label: 'Daily cap',
       value: consistencyInvalid ? '—' : formatCurrency(plan.dailyCap),
-      note: plan.raisesTarget
-        ? 'Set by your planned days, the new largest day.'
-        : 'A bigger day raises the profit required.',
+      note: plan.customCap
+        ? 'Your curated cap.'
+        : plan.raisesTarget
+          ? 'Set by your planned days, the new largest day.'
+          : 'A bigger day raises the profit required.',
     },
   ]
 

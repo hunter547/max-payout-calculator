@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildPlan, calculate, planFor, type CalcInputs } from './calc'
+import {
+  buildPlan,
+  calculate,
+  curatedPlan,
+  fastestDays,
+  MAX_PLAN_DAYS,
+  planFor,
+  type CalcInputs,
+} from './calc'
 
 /** The exact input row (A3:G3) saved in the .xlsx. */
 const SHEET_INPUTS: CalcInputs = {
@@ -113,6 +121,20 @@ describe('buildPlan', () => {
   })
 })
 
+/** Direct check of the rules a plan has to satisfy on final totals. */
+function pays(inputs: CalcInputs, n: number, x: number): boolean {
+  const total = inputs.currentNetProfit + n * x
+  const target = Math.max(
+    500,
+    inputs.payoutBuffer + inputs.payoutCap - inputs.balance,
+  )
+  const largest = Math.max(Math.abs(inputs.largestProfitDay), x)
+  return (
+    total >= target - 1e-6 &&
+    largest <= inputs.consistencyRequirement * total + 1e-6
+  )
+}
+
 describe('planFor', () => {
   it('conservative is exactly the spreadsheet plan', () => {
     const results = calculate(SHEET_INPUTS)
@@ -157,20 +179,6 @@ describe('planFor', () => {
   })
 
   it('aggressive is never slower, always pays out, and is the fewest days', () => {
-    // Direct check of the rules the plan has to satisfy on final totals.
-    const pays = (inputs: CalcInputs, n: number, x: number) => {
-      const total = inputs.currentNetProfit + n * x
-      const target = Math.max(
-        500,
-        inputs.payoutBuffer + inputs.payoutCap - inputs.balance,
-      )
-      const largest = Math.max(Math.abs(inputs.largestProfitDay), x)
-      return (
-        total >= target - 1e-6 &&
-        largest <= inputs.consistencyRequirement * total + 1e-6
-      )
-    }
-
     for (const balance of [4758.34, 1000]) {
       for (const currentNetProfit of [-3000, -1050, -400, 0, 6.6, 250, 900]) {
         for (const largestProfitDay of [0, 359, 500, 1200]) {
@@ -205,6 +213,93 @@ describe('planFor', () => {
                 if (pays(inputs, fast.days - 1, x)) sooner = x
               }
               expect(sooner, at).toBeNull()
+            }
+          }
+        }
+      }
+    }
+  })
+})
+
+describe('curatedPlan', () => {
+  // −$1,050 behind with a $500 largest day: the fastest plan is 3 days.
+  const behind = {
+    ...SHEET_INPUTS,
+    largestProfitDay: 500,
+    currentNetProfit: -1050,
+  }
+  const results = calculate(behind)
+
+  it('takes a day count from the fastest plan upward', () => {
+    expect(fastestDays(behind, results)).toBe(3)
+
+    const four = curatedPlan(behind, results, { mode: 'days', days: 4 })!
+    expect(four.days).toBe(4)
+    expect(four.dailyProfit).toBeCloseTo(525, 9)
+    expect(four.requiredProfit).toBeCloseTo(1050, 9)
+    expect(four.raisesTarget).toBe(true)
+
+    const nine = curatedPlan(behind, results, { mode: 'days', days: 9 })!
+    expect(nine.dailyProfit).toBeCloseTo(2050 / 9, 9)
+    expect(nine.raisesTarget).toBe(false)
+  })
+
+  it('raises a day count below the fastest plan to that minimum', () => {
+    const plan = curatedPlan(behind, results, { mode: 'days', days: 2 })!
+    expect(plan.days).toBe(3)
+    expect(plan.dailyProfit).toBeCloseTo(1050, 9)
+    expect(plan.adjusted).toBe(true)
+  })
+
+  it('works out the number of days from a custom daily cap', () => {
+    const plan = curatedPlan(behind, results, { mode: 'cap', cap: 700 })!
+    expect(plan.days).toBe(4)
+    expect(plan.dailyProfit).toBeCloseTo(525, 9)
+    expect(plan.dailyCap).toBe(700)
+    expect(plan.customCap).toBe(true)
+  })
+
+  it('gives up on a cap that would take more than a year of sessions', () => {
+    expect(MAX_PLAN_DAYS).toBe(252)
+    expect(curatedPlan(behind, results, { mode: 'cap', cap: 1 })).toBeNull()
+  })
+
+  it('matches conservative at its cap, and any day count pays out', () => {
+    for (const balance of [4758.34, 1000]) {
+      for (const currentNetProfit of [-3000, -1050, -400, 0, 6.6, 250, 900]) {
+        for (const largestProfitDay of [0, 359, 500, 1200]) {
+          for (const consistencyRequirement of [0.2, 0.3, 0.5, 0.8]) {
+            const inputs = {
+              ...SHEET_INPUTS,
+              balance,
+              currentNetProfit,
+              largestProfitDay,
+              consistencyRequirement,
+            }
+            const r = calculate(inputs)
+            if (r.targetMet) continue
+            const at = JSON.stringify(inputs)
+
+            // The conservative cap reproduces the conservative plan.
+            const safe = planFor(inputs, r, 'conservative')
+            const atCap = curatedPlan(inputs, r, {
+              mode: 'cap',
+              cap: r.maxAllowedSingleDay,
+            })
+            expect(atCap?.days, at).toBe(safe.days)
+            expect(atCap!.dailyProfit, at).toBeCloseTo(safe.dailyProfit, 6)
+
+            // Every day count from the fastest up pays out, and more days
+            // never ask for more per day.
+            const fastest = fastestDays(inputs, r)
+            let previous = Infinity
+            for (let n = fastest; n <= fastest + 6; n++) {
+              const plan = curatedPlan(inputs, r, { mode: 'days', days: n })
+              expect(plan, at).not.toBeNull()
+              expect(plan!.days, at).toBe(n)
+              expect(pays(inputs, n, plan!.dailyProfit), at).toBe(true)
+              expect(plan!.dailyProfit, at).toBeLessThanOrEqual(previous + 1e-9)
+              previous = plan!.dailyProfit
             }
           }
         }

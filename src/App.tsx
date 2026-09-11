@@ -5,6 +5,7 @@ import {
   type AccountKey,
   type BalanceDisplay,
 } from '@/components/AccountPanel'
+import { CuratedControls } from '@/components/CuratedControls'
 import { Ledger } from '@/components/Ledger'
 import { PnlChart, type ChartBar } from '@/components/PnlChart'
 import { SnapshotPanel } from '@/components/SnapshotPanel'
@@ -23,12 +24,14 @@ import { usePersistentState, useTheme, type Theme } from '@/hooks'
 import {
   buildPlan,
   calculate,
+  fastestDays,
+  MAX_PLAN_DAYS,
   planFor,
   type CalcResults,
   type Plan,
   type Strategy,
 } from '@/lib/calc'
-import { formatCurrency } from '@/lib/format'
+import { countWord, formatCurrency, MAX_SPELLED_COUNT } from '@/lib/format'
 import {
   newId,
   nextTradingDate,
@@ -40,8 +43,12 @@ import {
   type DayEntry,
 } from '@/lib/ledger'
 import {
+  CURATED_DEFAULT,
   deriveInputs,
   legacySetup,
+  resolvePlan,
+  toCuratedChoice,
+  type CuratedDraft,
   type Setup,
   type SetupDraft,
   type Snapshot,
@@ -65,35 +72,28 @@ const EMPTY_DRAFT: SetupDraft = {
   approach: null,
   payoutTaken: null,
   strategy: null,
+  curated: CURATED_DEFAULT,
   balance: '',
   largestProfitDay: '',
   netProfit: '',
   days: [],
 }
 
-const COUNT_WORDS = [
-  'zero',
-  'one',
-  'two',
-  'three',
-  'four',
-  'five',
-  'six',
-  'seven',
-  'eight',
-  'nine',
+const STRATEGY_OPTIONS: { value: Strategy; label: string }[] = [
+  { value: 'conservative', label: 'Conservative' },
+  { value: 'aggressive', label: 'Aggressive' },
+  { value: 'curated', label: 'Curated' },
 ]
 
-function countWord(n: number): string {
-  const word = n < COUNT_WORDS.length ? COUNT_WORDS[n] : String(n)
-  return word.charAt(0).toUpperCase() + word.slice(1)
-}
+const SEGMENT =
+  'px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground'
 
 function verdict(
   results: CalcResults,
-  plan: Plan,
+  plan: Plan | null,
   netProfit: number,
   consistencyInvalid: boolean,
+  curated: CuratedDraft,
 ) {
   if (consistencyInvalid) {
     return {
@@ -108,18 +108,43 @@ function verdict(
       detail: `Net profit of ${formatCurrency(netProfit)} clears the ${formatCurrency(results.minimumNetProfitRequired)} required.`,
     }
   }
+  if (!plan) {
+    const choice = toCuratedChoice(curated)
+    return {
+      title: 'Set your curated plan',
+      detail:
+        choice?.mode === 'cap'
+          ? `A ${formatCurrency(choice.cap)} daily cap would take more than ${MAX_PLAN_DAYS} trading days to reach payout. Raise it below.`
+          : curated.mode === 'days'
+            ? 'Pick how many trading days you want below.'
+            : 'Enter the most you want to make in a day below.',
+    }
+  }
+
   const days = plan.days
   const daily = formatCurrency(plan.dailyProfit)
-  const from = formatCurrency(netProfit)
   const to = formatCurrency(plan.requiredProfit)
+  const lift = ` Days that size lift the profit target from ${formatCurrency(results.minimumNetProfitRequired)} to ${to}, and the plan already counts that.`
+
+  let detail = `That takes net profit from ${formatCurrency(netProfit)} to ${to}.`
+  if (plan.customCap) {
+    detail += ` Each day stays at or under your ${formatCurrency(plan.dailyCap)} cap.`
+    if (plan.raisesTarget) detail += lift
+  } else if (plan.raisesTarget) {
+    detail += lift
+  } else {
+    detail += ` Keep each day at or under ${formatCurrency(plan.dailyCap)}; a bigger day raises the target.`
+  }
+  if (plan.adjusted) {
+    detail += ` ${countWord(days)} is the fewest days possible right now.`
+  }
+
   return {
     title:
       days === 1
         ? `One more trading day at ${daily}`
         : `${countWord(days)} more trading days at ${daily} each`,
-    detail: plan.raisesTarget
-      ? `That takes net profit from ${from} to ${to}. Days that size lift the profit target from ${formatCurrency(results.minimumNetProfitRequired)} to ${to}, and the plan already counts that.`
-      : `That takes net profit from ${from} to ${to}. Keep each day at or under ${formatCurrency(plan.dailyCap)}; a bigger day raises the target.`,
+    detail,
   }
 }
 
@@ -183,6 +208,7 @@ export default function App() {
   const approach = setup?.approach ?? 'dayByDay'
   const payoutTaken = setup?.payoutTaken === true
   const strategy: Strategy = setup?.strategy ?? 'conservative'
+  const curated = setup?.curated ?? CURATED_DEFAULT
   const balanceEntered = approach === 'pointInTime' || payoutTaken
 
   const sorted = useMemo(() => sortByDate(days), [days])
@@ -207,10 +233,13 @@ export default function App() {
   const consistencyInvalid = consistency <= 0
 
   const results = useMemo(() => calculate(inputs), [inputs])
+  const fastest = useMemo(() => fastestDays(inputs, results), [inputs, results])
   const plan = useMemo(
-    () => planFor(inputs, results, strategy),
-    [inputs, results, strategy],
+    () => resolvePlan(inputs, results, strategy, curated),
+    [inputs, results, strategy, curated],
   )
+  // Until a curated plan is set, the breakdown shows the spreadsheet's plan.
+  const shownPlan = plan ?? planFor(inputs, results, 'conservative')
 
   const bars = useMemo<ChartBar[]>(() => {
     const logged = approach === 'dayByDay' ? sorted : []
@@ -228,7 +257,7 @@ export default function App() {
       }
     })
 
-    if (consistencyInvalid) return recorded
+    if (consistencyInvalid || !plan) return recorded
 
     let date = planStartDate(logged)
     const planned: ChartBar[] = buildPlan(inputs, plan).map((day, i) => {
@@ -253,6 +282,7 @@ export default function App() {
       approach: result.approach,
       payoutTaken: result.payoutTaken,
       strategy: result.strategy,
+      curated: result.curated,
     })
     if (result.approach === 'pointInTime' || result.payoutTaken) {
       setAccount((prev) => ({ ...prev, balance: result.balance }))
@@ -275,6 +305,7 @@ export default function App() {
           approach: setup.approach,
           payoutTaken: setup.approach === 'dayByDay' ? setup.payoutTaken : null,
           strategy,
+          curated,
           balance: account.balance,
           largestProfitDay: snapshot.largestProfitDay,
           netProfit: snapshot.netProfit,
@@ -301,14 +332,31 @@ export default function App() {
     plan,
     inputs.currentNetProfit,
     consistencyInvalid,
+    curated,
   )
 
-  const balanceDisplay: BalanceDisplay =
-    approach === 'pointInTime'
-      ? { kind: 'hidden' }
-      : balanceEntered
-        ? { kind: 'input' }
-        : { kind: 'derived', value: summary.netProfit }
+  // Balance sits with the other lockable account settings in both approaches.
+  const balanceDisplay: BalanceDisplay = balanceEntered
+    ? { kind: 'input' }
+    : { kind: 'derived', value: summary.netProfit }
+
+  /** A sensible first curated plan: the conservative day count, in range. */
+  function startingCurated(): CuratedDraft {
+    if (fastest <= MAX_SPELLED_COUNT) {
+      const start = Math.max(results.minimumTradingDaysLeft, fastest)
+      return { ...curated, mode: 'days', days: Math.min(start, MAX_SPELLED_COUNT) }
+    }
+    return { ...curated, mode: 'cap', cap: results.maxAllowedSingleDay.toFixed(2) }
+  }
+
+  function chooseStrategy(next: Strategy) {
+    const needsStart = next === 'curated' && !toCuratedChoice(curated)
+    setSetup({
+      ...setup!,
+      strategy: next,
+      curated: needsStart ? startingCurated() : curated,
+    })
+  }
 
   function clearDays() {
     const count = days.length
@@ -355,28 +403,40 @@ export default function App() {
                 size="sm"
                 value={strategy}
                 onValueChange={(value) => {
-                  if (value) setSetup({ ...setup, strategy: value as Strategy })
+                  if (value) chooseStrategy(value as Strategy)
                 }}
                 aria-labelledby="strategy-label"
               >
-                <ToggleGroupItem
-                  value="conservative"
-                  className="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                >
-                  Conservative
-                </ToggleGroupItem>
-                <ToggleGroupItem
-                  value="aggressive"
-                  className="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                >
-                  Aggressive
-                </ToggleGroupItem>
+                {STRATEGY_OPTIONS.map((option) => (
+                  <ToggleGroupItem
+                    key={option.value}
+                    value={option.value}
+                    className={SEGMENT}
+                  >
+                    {option.label}
+                  </ToggleGroupItem>
+                ))}
               </ToggleGroup>
             </div>
 
+            {strategy === 'curated' &&
+              !results.targetMet &&
+              !consistencyInvalid && (
+                <CuratedControls
+                  idPrefix="dashboard-curated"
+                  value={curated}
+                  fastest={fastest}
+                  plan={plan}
+                  onChange={(patch) =>
+                    setSetup({ ...setup, curated: { ...curated, ...patch } })
+                  }
+                  className="mt-4 max-w-xl rounded-lg border bg-card p-4"
+                />
+              )}
+
             <PnlChart
               bars={bars}
-              cap={consistencyInvalid ? 0 : plan.dailyCap}
+              cap={consistencyInvalid ? 0 : shownPlan.dailyCap}
               className="mt-5 rounded-xl border bg-card px-2 pt-3 pb-4 sm:px-4"
             />
           </section>
@@ -402,11 +462,7 @@ export default function App() {
               />
             ) : (
               <SnapshotPanel
-                balance={account.balance}
                 snapshot={snapshot}
-                onBalanceChange={(v) =>
-                  setAccount((prev) => ({ ...prev, balance: v }))
-                }
                 onSnapshotChange={(patch) =>
                   setSnapshot((prev) => ({ ...prev, ...patch }))
                 }
@@ -437,7 +493,7 @@ export default function App() {
               <Separator />
               <TargetBreakdown
                 results={results}
-                plan={plan}
+                plan={shownPlan}
                 largestProfitDay={inputs.largestProfitDay}
                 netProfit={inputs.currentNetProfit}
                 tradingDays={approach === 'dayByDay' ? summary.tradingDays : null}

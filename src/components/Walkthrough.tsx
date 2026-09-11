@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Info } from 'lucide-react'
+import { CuratedControls } from '@/components/CuratedControls'
 import { Ledger } from '@/components/Ledger'
 import { MoneyField } from '@/components/MoneyField'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -7,7 +8,14 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { calculate, planFor, type Plan, type Strategy } from '@/lib/calc'
+import {
+  calculate,
+  fastestDays,
+  MAX_PLAN_DAYS,
+  planFor,
+  type Plan,
+  type Strategy,
+} from '@/lib/calc'
 import { formatCurrency } from '@/lib/format'
 import {
   isAmount,
@@ -19,12 +27,15 @@ import {
 } from '@/lib/ledger'
 import {
   deriveInputs,
+  resolvePlan,
   stepsFor,
+  toCuratedChoice,
   type Approach,
   type Rules,
   type SetupDraft,
   type StepId,
 } from '@/lib/setup'
+import { cn } from '@/lib/utils'
 
 export interface WalkthroughResult
   extends Omit<SetupDraft, 'approach' | 'payoutTaken' | 'strategy'> {
@@ -95,6 +106,12 @@ const STRATEGIES: {
     title: 'Aggressive',
     summary:
       'The fewest days to reach payout, whatever each day needs to make. Bigger days raise your largest day, and the target with it.'
+  },
+  {
+    value: 'curated',
+    title: 'Curated',
+    summary:
+      'Choose how many trading days you want, or the most you want to make in a day. The plan works out the rest.'
   }
 ]
 
@@ -148,17 +165,22 @@ function ChoiceCard({
   id,
   value,
   title,
+  className,
   children,
 }: {
   id: string
   value: string
   title: string
+  className?: string
   children: ReactNode
 }) {
   return (
     <Label
       htmlFor={id}
-      className="flex h-full cursor-pointer flex-col items-start gap-3 rounded-lg border bg-card p-5 leading-normal font-normal transition-colors hover:border-foreground/30 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:ring-2 has-[[data-state=checked]]:ring-primary/25"
+      className={cn(
+        'flex h-full cursor-pointer flex-col items-start gap-3 rounded-lg border bg-card p-5 leading-normal font-normal transition-colors hover:border-foreground/30 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:ring-2 has-[[data-state=checked]]:ring-primary/25',
+        className,
+      )}
     >
       <span className="flex w-full items-center justify-between gap-4">
         <span id={`${id}-title`} className="font-expanded text-lg font-bold">
@@ -217,8 +239,10 @@ export function Walkthrough({
     const results = calculate(inputs)
     return {
       targetMet: results.targetMet,
+      fastest: fastestDays(inputs, results),
       conservative: planFor(inputs, results, 'conservative'),
       aggressive: planFor(inputs, results, 'aggressive'),
+      curated: resolvePlan(inputs, results, 'curated', draft.curated),
     }
   }, [step, draft, daySummary, rules])
 
@@ -258,10 +282,22 @@ export function Walkthrough({
           : 'Enter a dollar amount. It can be negative.'
       case 'days':
         return null
-      case 'strategy':
-        return draft.strategy
+      case 'strategy': {
+        if (!draft.strategy) {
+          return 'Choose conservative, aggressive, or curated to continue.'
+        }
+        if (draft.strategy !== 'curated' || !preview || preview.targetMet) {
+          return null
+        }
+        if (!toCuratedChoice(draft.curated)) {
+          return draft.curated.mode === 'days'
+            ? 'Pick how many trading days you want.'
+            : 'Enter a daily cap as a dollar amount, like 400.'
+        }
+        return preview.curated
           ? null
-          : 'Choose conservative or aggressive to continue.'
+          : `That cap would take more than ${MAX_PLAN_DAYS} trading days. Raise it.`
+      }
     }
   }
 
@@ -441,6 +477,7 @@ export function Walkthrough({
                   id={`strategy-${s.value}`}
                   value={s.value}
                   title={s.title}
+                  className={s.value === 'curated' ? 'sm:col-span-2' : undefined}
                 >
                   <span className="text-sm text-muted-foreground">
                     {s.summary}
@@ -450,13 +487,15 @@ export function Walkthrough({
                       {s.example}
                     </span>
                   )}
-                  {preview && plan && (
+                  {preview && (
                     <span className="border-t pt-3 text-sm">
                       Your plan:{' '}
                       <span className="font-figure font-semibold">
                         {preview.targetMet
                           ? 'target already reached'
-                          : planText(plan)}
+                          : plan
+                            ? planText(plan)
+                            : 'pick days or a cap'}
                       </span>
                     </span>
                   )}
@@ -464,11 +503,24 @@ export function Walkthrough({
               )
             })}
           </RadioGroup>
+          {draft.strategy === 'curated' && preview && !preview.targetMet && (
+            <CuratedControls
+              idPrefix="walkthrough-curated"
+              value={draft.curated}
+              fastest={preview.fastest}
+              plan={preview.curated}
+              onChange={(patch) =>
+                update({ curated: { ...draft.curated, ...patch } })
+              }
+              className="mt-6 rounded-lg border bg-card p-5"
+            />
+          )}
           {preview &&
             !preview.targetMet &&
             preview.conservative.days === preview.aggressive.days && (
               <p className="mt-4 text-sm text-muted-foreground">
-                For your numbers right now, both come out the same.
+                For your numbers right now, conservative and aggressive come
+                out the same.
               </p>
             )}
         </>

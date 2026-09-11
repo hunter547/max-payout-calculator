@@ -126,8 +126,18 @@ export function calculate(inputs: CalcInputs): CalcResults {
  * Aggressive: the fewest days to payout, however big each day has to be.
  * Days above the current largest day raise the target, and the plan counts
  * that.
+ *
+ * Curated: the trader picks the number of days, or a daily cap that replaces
+ * the default and largest-day cap and sets the number of days.
  */
-export type Strategy = 'conservative' | 'aggressive'
+export type Strategy = 'conservative' | 'aggressive' | 'curated'
+
+export type CuratedChoice =
+  | { mode: 'days'; days: number }
+  | { mode: 'cap'; cap: number }
+
+/** How far a curated cap may stretch a plan: a year of trading sessions. */
+export const MAX_PLAN_DAYS = 252
 
 export interface Plan {
   strategy: Strategy
@@ -137,60 +147,101 @@ export interface Plan {
   dailyProfit: number
   /** Net profit required once the planned days are counted. */
   requiredProfit: number
-  /** Most one day can make under the consistency rule once the plan is done. */
+  /** Most one day can make under the plan once it's done. */
   dailyCap: number
   /** Planned days top the current largest day and lift the target. */
   raisesTarget: boolean
+  /** Curated by cap: dailyCap is the trader's own cap. */
+  customCap?: boolean
+  /** Curated by days: the pick was below the fewest possible and was raised. */
+  adjusted?: boolean
 }
 
 /**
- * Fewest equal days of x that reach payout. With F = net profit, D = largest
- * day, E = minimum target, G = consistency, n days of x must satisfy, on the
- * final total T = F + n·x:
+ * The smallest daily amount that reaches payout in exactly n equal days, or
+ * null if no amount can. With F = net profit, D = largest day, E = minimum
+ * target, G = consistency, n days of x must satisfy, on the final total
+ * T = F + n·x:
  *   T >= E                  (minimum target)
  *   max(D, x) <= G·T        (consistency, counting the new days)
- * Together those give x >= I3 / n, plus x·(1 − G·n) <= G·F. Equal days are
- * optimal: for a given total they keep the largest day as small as possible.
- * The conservative plan always satisfies these, so n never exceeds J3.
+ * Together those give x >= I3 / n, plus x·(1 − G·n) <= G·F. Once some n is
+ * possible, every larger n is too.
+ */
+function dailyFor(
+  inputs: CalcInputs,
+  results: CalcResults,
+  n: number,
+): number | null {
+  const F = inputs.currentNetProfit
+  const G = inputs.consistencyRequirement
+  const gn = G * n
+  let lo = results.remainingProfitNeeded / n
+  let hi = Infinity
+
+  if (Math.abs(gn - 1) < 1e-9) {
+    // x·0 <= G·F: only possible without a drawdown to climb out of.
+    if (F < 0) return null
+  } else if (gn < 1) {
+    // x <= G·F / (1 − G·n): needs profit already banked.
+    if (F <= 0) return null
+    hi = (G * F) / (1 - gn)
+  } else if (F < 0) {
+    // x >= G·|F| / (G·n − 1): each day must also cover the drawdown.
+    lo = Math.max(lo, (G * -F) / (gn - 1))
+  }
+
+  return lo <= hi * (1 + 1e-9) ? lo : null
+}
+
+/**
+ * Fewest equal days that reach payout. Equal days are optimal: for a given
+ * total they keep the largest day as small as possible. The conservative plan
+ * always satisfies the same rules, so this never needs more than J3 days.
  */
 function fewestDays(
   inputs: CalcInputs,
   results: CalcResults,
 ): { days: number; dailyProfit: number } {
-  const F = inputs.currentNetProfit
-  const G = inputs.consistencyRequirement
-  const I = results.remainingProfitNeeded
-
   for (let n = 1; n <= results.minimumTradingDaysLeft; n++) {
-    const gn = G * n
-    let lo = I / n
-    let hi = Infinity
-
-    if (Math.abs(gn - 1) < 1e-9) {
-      // x·0 <= G·F: only possible without a drawdown to climb out of.
-      if (F < 0) continue
-    } else if (gn < 1) {
-      // x <= G·F / (1 − G·n): needs profit already banked.
-      if (F <= 0) continue
-      hi = (G * F) / (1 - gn)
-    } else if (F < 0) {
-      // x >= G·|F| / (G·n − 1): each day must also cover the drawdown.
-      lo = Math.max(lo, (G * -F) / (gn - 1))
-    }
-
-    if (lo <= hi * (1 + 1e-9)) return { days: n, dailyProfit: lo }
+    const dailyProfit = dailyFor(inputs, results, n)
+    if (dailyProfit !== null) return { days: n, dailyProfit }
   }
-
   return {
     days: results.minimumTradingDaysLeft,
     dailyProfit: results.dailyProfitNeeded,
   }
 }
 
-export function planFor(
+/** The fewest trading days any plan can reach payout in: the aggressive count. */
+export function fastestDays(inputs: CalcInputs, results: CalcResults): number {
+  return fewestDays(inputs, results).days
+}
+
+/** A plan of `days` equal days, with the target those days imply. */
+function planOf(
   inputs: CalcInputs,
   results: CalcResults,
   strategy: Strategy,
+  days: number,
+  dailyProfit: number,
+): Plan {
+  const G = inputs.consistencyRequirement
+  const largest = Math.max(Math.abs(inputs.largestProfitDay), dailyProfit)
+  const requiredProfit = Math.max(results.minimumTargetNetProfit, largest / G)
+  return {
+    strategy,
+    days,
+    dailyProfit,
+    requiredProfit,
+    dailyCap: requiredProfit * G,
+    raisesTarget: requiredProfit > results.minimumNetProfitRequired + 1e-9,
+  }
+}
+
+export function planFor(
+  inputs: CalcInputs,
+  results: CalcResults,
+  strategy: 'conservative' | 'aggressive',
 ): Plan {
   const conservative: Plan = {
     strategy,
@@ -204,19 +255,56 @@ export function planFor(
     return conservative
   }
 
-  const G = inputs.consistencyRequirement
   const { days, dailyProfit } = fewestDays(inputs, results)
-  const largest = Math.max(Math.abs(inputs.largestProfitDay), dailyProfit)
-  const requiredProfit = Math.max(results.minimumTargetNetProfit, largest / G)
+  return planOf(inputs, results, strategy, days, dailyProfit)
+}
 
-  return {
-    strategy,
-    days,
-    dailyProfit,
-    requiredProfit,
-    dailyCap: requiredProfit * G,
-    raisesTarget: requiredProfit > results.minimumNetProfitRequired + 1e-9,
+/**
+ * Curated by days: that many equal days (never fewer than the fastest plan)
+ * at the smallest amount that still pays out.
+ *
+ * Curated by cap: the fewest days whose equal daily amount stays at or under
+ * the trader's cap. At the conservative cap this is the conservative plan.
+ * Null if the cap would take more than MAX_PLAN_DAYS.
+ */
+export function curatedPlan(
+  inputs: CalcInputs,
+  results: CalcResults,
+  choice: CuratedChoice,
+): Plan | null {
+  if (results.minimumTradingDaysLeft === 0) {
+    return { ...planFor(inputs, results, 'conservative'), strategy: 'curated' }
   }
+
+  const fastest = fastestDays(inputs, results)
+
+  if (choice.mode === 'days') {
+    const days = Math.max(Math.round(choice.days), fastest)
+    const dailyProfit = dailyFor(inputs, results, days)
+    if (dailyProfit === null) return null
+    return {
+      ...planOf(inputs, results, 'curated', days, dailyProfit),
+      adjusted: days !== choice.days,
+    }
+  }
+
+  if (!(choice.cap > 0)) return null
+  // Each day is at least I3 / n, so no plan under the cap is shorter than this.
+  const start = Math.max(
+    fastest,
+    Math.ceil(results.remainingProfitNeeded / choice.cap - 1e-9),
+  )
+  for (let n = start; n <= MAX_PLAN_DAYS; n++) {
+    const dailyProfit = dailyFor(inputs, results, n)
+    if (dailyProfit !== null && dailyProfit <= choice.cap * (1 + 1e-9)) {
+      return {
+        ...planOf(inputs, results, 'curated', n, dailyProfit),
+        dailyCap: choice.cap,
+        customCap: true,
+      }
+    }
+  }
+  return null
 }
 
 export interface PlanDay {
