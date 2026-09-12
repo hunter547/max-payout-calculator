@@ -24,6 +24,8 @@ const SHEET_INPUTS: CalcInputs = {
   consistencyRequirement: 0.5,
   minTradingDays: 2,
   tradingDaysSoFar: 3,
+  // MyFundedFutures counts every day traded, win or lose.
+  qualifyingDayProfit: 0,
 }
 
 describe('calculate — parity with the spreadsheet', () => {
@@ -116,6 +118,8 @@ describe('minimum trading days', () => {
     consistencyRequirement: 0.35,
     minTradingDays: 5,
     tradingDaysSoFar: 1,
+    // A 25k Growth day counts once it beats $100.
+    qualifyingDayProfit: 100,
   }
 
   it('counts the days the firm still needs', () => {
@@ -123,6 +127,66 @@ describe('minimum trading days', () => {
     expect(r.eligibilityDaysLeft).toBe(4)
     expect(r.payoutReady).toBe(false)
     expect(calculate({ ...growth, tradingDaysSoFar: 9 }).eligibilityDaysLeft).toBe(0)
+  })
+
+  it('makes every planned day beat the bar the firm counts by', () => {
+    const r = calculate(growth)
+    expect(r.qualifyingDailyProfit).toBeCloseTo(100.01, 9)
+
+    for (const strategy of ['conservative', 'aggressive'] as const) {
+      const plan = planFor(growth, r, strategy)
+      expect(plan.dailyProfit).toBeGreaterThan(100)
+    }
+
+    // A target small enough that the days would otherwise ask for pennies.
+    const nearly: CalcInputs = {
+      ...growth,
+      balance: 26450,
+      largestProfitDay: 0,
+      currentNetProfit: 0,
+    }
+    const near = calculate(nearly)
+    expect(near.dailyProfitNeeded).toBeLessThan(100)
+    expect(planFor(nearly, near, 'conservative').dailyProfit).toBeCloseTo(100.01, 9)
+
+    // With the days already behind you, a planned day is only profit again
+    // and drops back to what the maths asks for.
+    const done = { ...nearly, tradingDaysSoFar: 5 }
+    const covered = calculate(done)
+    expect(covered.qualifyingDailyProfit).toBe(0)
+    expect(planFor(done, covered, 'conservative').dailyProfit).toBeLessThan(100)
+  })
+
+  it('asks for qualifying days even when the profit is already there', () => {
+    // Balance past the threshold and profit past the consistency floor: only
+    // the firm's days are missing, and they still have to count.
+    const done: CalcInputs = {
+      ...growth,
+      balance: 27000,
+      currentNetProfit: 1000,
+      largestProfitDay: 300,
+      tradingDaysSoFar: 2,
+    }
+    const r = calculate(done)
+    expect(r.targetMet).toBe(true)
+    expect(r.payoutReady).toBe(false)
+
+    const plan = planFor(done, r, 'conservative')
+    expect(plan.days).toBe(3)
+    // Not zero: a day of nothing would not be one of the three.
+    expect(plan.dailyProfit).toBeCloseTo(100.01, 9)
+
+    // Where the firm sets no bar, those days can make anything.
+    const noBar = { ...done, qualifyingDayProfit: 0 }
+    expect(planFor(noBar, calculate(noBar), 'conservative').dailyProfit).toBe(0)
+  })
+
+  it('turns down a curated cap that no day could count under', () => {
+    const r = calculate(growth)
+    // $80 a day never counts towards the five days, however many you trade.
+    expect(curatedPlan(growth, r, { mode: 'cap', cap: 80 })).toBeNull()
+    // A cap over the bar is fine.
+    expect(curatedPlan(growth, r, { mode: 'cap', cap: 200 })).not.toBeNull()
   })
 
   it('stretches every plan to the firm minimum', () => {
@@ -147,7 +211,8 @@ describe('minimum trading days', () => {
 
     const plan = planFor(met, r, 'conservative')
     expect(plan.days).toBe(3)
-    expect(plan.dailyProfit).toBe(0)
+    // Not nothing: each of those days has to beat $100 to be one of them.
+    expect(plan.dailyProfit).toBeCloseTo(100.01, 9)
     expect(plan.heldByEligibility).toBe(true)
   })
 

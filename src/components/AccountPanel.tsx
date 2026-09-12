@@ -56,6 +56,12 @@ const RULES: { key: RuleKey; label: string; unit: FieldUnit; hint: string }[] = 
     unit: 'days',
     hint: 'Trading days the firm needs since your last payout.',
   },
+  {
+    key: 'qualifyingDayProfit',
+    label: 'Profit for a day to count',
+    unit: '$',
+    hint: 'A day has to beat this to be one of those trading days. 0 if every day traded counts.',
+  },
 ]
 
 export type BalanceDisplay =

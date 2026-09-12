@@ -116,6 +116,7 @@ function verdict(
   consistencyInvalid: boolean,
   curated: CuratedDraft,
   firm: string,
+  qualifyingDayProfit: number,
 ) {
   if (consistencyInvalid) {
     return {
@@ -132,6 +133,17 @@ function verdict(
   }
   if (!plan) {
     const choice = toCuratedChoice(curated)
+    // A cap under the firm's bar buys profit but never a qualifying day.
+    const belowBar =
+      choice?.mode === 'cap' &&
+      results.qualifyingDailyProfit > 0 &&
+      choice.cap < results.qualifyingDailyProfit
+    if (belowBar) {
+      return {
+        title: 'Raise your daily cap',
+        detail: `A day has to make more than ${formatCurrency(qualifyingDayProfit)} to count towards the ${results.eligibilityDaysLeft} trading ${results.eligibilityDaysLeft === 1 ? 'day' : 'days'} ${firm} still needs, so a cap below that never gets there.`,
+      }
+    }
     return {
       title: 'Set your curated plan',
       detail:
@@ -148,12 +160,16 @@ function verdict(
 
   // The profit is already there; only the firm's trading days are missing.
   if (results.targetMet) {
+    const each =
+      qualifyingDayProfit > 0
+        ? `each making more than ${formatCurrency(qualifyingDayProfit)} to count`
+        : 'whatever those days make'
     return {
       title:
         days === 1
           ? 'One more trading day to qualify'
           : `${countWord(days)} more trading days to qualify`,
-      detail: `Net profit of ${formatCurrency(netProfit)} already clears the ${formatCurrency(results.minimumNetProfitRequired)} required. ${firm} needs ${results.eligibilityDaysLeft} more trading ${results.eligibilityDaysLeft === 1 ? 'day' : 'days'} before it will pay out, whatever those days make.`,
+      detail: `Net profit of ${formatCurrency(netProfit)} already clears the ${formatCurrency(results.minimumNetProfitRequired)} required. ${firm} needs ${results.eligibilityDaysLeft} more trading ${results.eligibilityDaysLeft === 1 ? 'day' : 'days'} before it will pay out, ${each}.`,
     }
   }
 
@@ -276,7 +292,13 @@ export default function App() {
   const balanceEntered = approach === 'pointInTime' || payoutTaken
 
   const sorted = useMemo(() => sortByDate(days), [days])
-  const summary = useMemo(() => summarize(sorted), [sorted])
+  // Which logged days count is the firm's call, so the ledger is summarised
+  // against its bar.
+  const qualifyingDayProfit = parseAmount(account.qualifyingDayProfit)
+  const summary = useMemo(
+    () => summarize(sorted, qualifyingDayProfit),
+    [sorted, qualifyingDayProfit],
+  )
 
   const inputs = useMemo(
     () =>
@@ -495,6 +517,7 @@ export default function App() {
     consistencyInvalid,
     curated,
     firmOf(template).name,
+    qualifyingDayProfit,
   )
 
   const balanceDisplay: BalanceDisplay = balanceEntered
@@ -624,6 +647,7 @@ export default function App() {
             ) : (
               <SnapshotPanel
                 snapshot={snapshot}
+                qualifyingDayProfit={qualifyingDayProfit}
                 onSnapshotChange={(patch) =>
                   setSnapshot((prev) => ({ ...prev, ...patch }))
                 }
@@ -691,7 +715,11 @@ export default function App() {
                       }
                     : null
                 }
-                tradingDays={approach === 'dayByDay' ? summary.tradingDays : null}
+                tradingDays={
+                  approach === 'dayByDay'
+                    ? { logged: summary.tradingDays, counting: summary.qualifyingDays }
+                    : null
+                }
                 consistencyInvalid={consistencyInvalid}
               />
             </aside>

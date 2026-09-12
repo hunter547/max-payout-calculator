@@ -1,16 +1,23 @@
 import { MoneyField } from '@/components/MoneyField'
+import { formatRule } from '@/lib/format'
 import { isAmount } from '@/lib/ledger'
 import type { Snapshot } from '@/lib/setup'
 
 interface SnapshotPanelProps {
   snapshot: Snapshot
   onSnapshotChange: (patch: Partial<Snapshot>) => void
+  /** Profit a day must beat to count, where the firm sets one. */
+  qualifyingDayProfit: number
 }
 
 const looksWrong = (value: string) => value !== '' && !isAmount(value)
 
 /** Point-in-time numbers. Current balance lives with the account settings. */
-export function SnapshotPanel({ snapshot, onSnapshotChange }: SnapshotPanelProps) {
+export function SnapshotPanel({
+  snapshot,
+  onSnapshotChange,
+  qualifyingDayProfit,
+}: SnapshotPanelProps) {
   return (
     <section aria-labelledby="snapshot-heading" className="min-w-0">
       <h2 id="snapshot-heading" className="font-expanded text-xl font-bold">
@@ -42,7 +49,11 @@ export function SnapshotPanel({ snapshot, onSnapshotChange }: SnapshotPanelProps
           id="snapshot-days"
           label="Trading days so far"
           unit="days"
-          hint="Days you have traded since the last payout."
+          hint={
+            qualifyingDayProfit > 0
+              ? `Days since the last payout making more than ${formatRule(qualifyingDayProfit)}; only those count.`
+              : 'Days you have traded since the last payout.'
+          }
           value={snapshot.tradingDays}
           invalid={looksWrong(snapshot.tradingDays)}
           onChange={(v) => onSnapshotChange({ tradingDays: v })}

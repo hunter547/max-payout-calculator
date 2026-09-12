@@ -112,6 +112,7 @@ describe('deriveInputs', () => {
       consistencyRequirement: 0.5,
       minTradingDays: 2,
       tradingDaysSoFar: 3,
+      qualifyingDayProfit: 0,
     })
   })
 
@@ -148,6 +149,29 @@ describe('deriveInputs', () => {
     expect(deriveInputs(source, summarize(days), GROWTH_25K).balance).toBe(25006.6)
   })
 
+  it('counts only the logged days that clear the firm bar', () => {
+    const source = {
+      approach: 'dayByDay' as const,
+      payoutTaken: true,
+      balance: '25400',
+      largestProfitDay: '',
+      netProfit: '',
+      tradingDays: '',
+    }
+    const logged = [
+      { id: 'a', date: '2026-09-08', amount: '300' },
+      { id: 'b', date: '2026-09-09', amount: '90' },
+      { id: 'c', date: '2026-09-10', amount: '-40' },
+    ]
+    // MyFundedFutures counts all three; a 25k Growth counts only the $300.
+    expect(
+      deriveInputs(source, summarize(logged), BUILDER).tradingDaysSoFar,
+    ).toBe(3)
+    expect(
+      deriveInputs(source, summarize(logged, 100), GROWTH_25K).tradingDaysSoFar,
+    ).toBe(1)
+  })
+
   it('carries a Tradeify account rules through', () => {
     const inputs = deriveInputs(
       {
@@ -167,6 +191,7 @@ describe('deriveInputs', () => {
       consistencyRequirement: 0.35,
       minTradingDays: 5,
       tradingDaysSoFar: 2,
+      qualifyingDayProfit: 100,
     })
   })
 })

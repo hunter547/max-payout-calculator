@@ -112,6 +112,11 @@ export interface AccountTemplate {
   /** Trading days needed since the last payout before a payout is allowed. */
   minTradingDays: number
   /**
+   * Profit a day must beat to count as one of those trading days. Zero where
+   * the firm counts every day traded, win or lose.
+   */
+  qualifyingDayProfit: number
+  /**
    * The account's trailing max drawdown, where the firm publishes one. Used
    * to judge whether the room a payout leaves is thin: it is what the account
    * had to play with in the first place.
@@ -132,6 +137,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     startingBalance: 0,
     consistency: 0.5,
     minTradingDays: 2,
+    qualifyingDayProfit: 0,
     payout: {
       caps: [2000],
       minimumPayout: 500,
@@ -146,6 +152,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     startingBalance: 25000,
     consistency: 0.35,
     minTradingDays: 5,
+    qualifyingDayProfit: 100,
     drawdown: 1000,
     payout: {
       caps: [1000],
@@ -163,6 +170,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     startingBalance: 50000,
     consistency: 0.35,
     minTradingDays: 5,
+    qualifyingDayProfit: 150,
     drawdown: 2000,
     payout: {
       caps: [1500, 2000, 2500, 3000],
@@ -186,6 +194,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     startingBalance: 100000,
     consistency: 0.35,
     minTradingDays: 5,
+    qualifyingDayProfit: 200,
     drawdown: 3500,
     payout: {
       caps: [2000, 2500, 3000, 4000],
@@ -209,6 +218,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     startingBalance: 150000,
     consistency: 0.35,
     minTradingDays: 5,
+    qualifyingDayProfit: 250,
     drawdown: 5000,
     payout: {
       caps: [2500, 3000, 4000, 5000],
@@ -376,6 +386,7 @@ export type RuleKey =
   | 'minimumPayout'
   | 'consistency'
   | 'minTradingDays'
+  | 'qualifyingDayProfit'
 
 export type AccountKey = 'balance' | RuleKey
 
@@ -393,6 +404,7 @@ export function rulesFor(
     minimumPayout: String(schedule.minimumPayout),
     consistency: String(template.consistency * 100),
     minTradingDays: String(template.minTradingDays),
+    qualifyingDayProfit: String(template.qualifyingDayProfit),
   }
 }
 

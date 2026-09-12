@@ -109,7 +109,7 @@ Your numbers map to the sheet like this:
 | `A3` Balance | entered | entered after a payout, else starting balance plus logged days |
 | `D3` Largest Profit Day | entered | biggest winning day (0 until you have one) |
 | `F3` Current Net Profit | entered | sum of every day, losses included |
-| trading days | entered | how many days are logged |
+| trading days | entered | logged days that clear the firm's profit bar |
 
 Everything is saved in your browser's `localStorage` (`mpc.setup`, which also
 holds the payout schedule, plus `mpc.rules`, `mpc.snapshot`, `mpc.days` and
@@ -129,13 +129,13 @@ level of the question:
 Picking a size fills in the account settings; the fields stay editable behind
 the lock, and "Restore defaults" puts the template's rules back.
 
-| Firm | Type | Size | Starts at | Qualifying balance | Consistency | Minimum days | Minimum payout |
-|------|------|------|-----------|--------------------|-------------|--------------|----------------|
-| MyFundedFutures | Builder | 50k | $0 | — | 50% | 2 | $500 |
-| Tradeify | Growth | 25k | $25,000 | $26,500 | 35% | 5 | $250 |
-| Tradeify | Growth | 50k | $50,000 | $53,000 | 35% | 5 | $500 |
-| Tradeify | Growth | 100k | $100,000 | $104,500 | 35% | 5 | $1,000 |
-| Tradeify | Growth | 150k | $150,000 | $156,500 | 35% | 5 | $1,500 |
+| Firm | Type | Size | Starts at | Qualifying balance | Consistency | Minimum days | A day counts over | Minimum payout |
+|------|------|------|-----------|--------------------|-------------|--------------|-------------------|----------------|
+| MyFundedFutures | Builder | 50k | $0 | — | 50% | 2 | every day | $500 |
+| Tradeify | Growth | 25k | $25,000 | $26,500 | 35% | 5 | $100 | $250 |
+| Tradeify | Growth | 50k | $50,000 | $53,000 | 35% | 5 | $150 | $500 |
+| Tradeify | Growth | 100k | $100,000 | $104,500 | 35% | 5 | $200 | $1,000 |
+| Tradeify | Growth | 150k | $150,000 | $156,500 | 35% | 5 | $250 | $1,500 |
 
 Consistency and minimum days sit on the template rather than the type, so a
 firm that varies them by size can say so; the type screen reads them off its
@@ -259,11 +259,41 @@ mode and drops the plate in dark mode, where the art already fits.
 ### Minimum trading days
 
 Most firms want a number of trading days since the last payout before they will
-pay one, whatever those days make. The app subtracts the days you have from the
-firm's minimum and never plans fewer days than are left, so a plan can run
-longer than the profit alone would need. When the profit target is already met
-but days are missing, the headline says so and the planned days ask for nothing
-("Three more trading days to qualify").
+pay one. The app subtracts the days you have from the firm's minimum and never
+plans fewer days than are left, so a plan can run longer than the profit alone
+would need. When the profit target is already met but days are missing, the
+headline says so ("Three more trading days to qualify").
+
+### Which days count
+
+A day is not always a day. Tradeify only counts one towards the minimum if it
+makes **more** than a figure set by account size — $100, $150, $200 and $250
+across the Growth sizes — so a small green day, a flat day and a losing day all
+count for nothing. MyFundedFutures counts every day traded, which is
+`qualifyingDayProfit: 0` and leaves the workbook's behaviour alone.
+
+That figure changes three things:
+
+- **Days behind you.** `summarize(entries, qualifyingProfit)` reports
+  `qualifyingDays` alongside `tradingDays`, and day-by-day feeds the former to
+  the calculator. The breakdown says which: "Only days over $150 count, so 3 of
+  your 6 do." Point-in-time asks for the count that already counts.
+- **Days ahead of you.** A planned day only buys eligibility if it clears the
+  bar too, so `qualifyingDailyProfit` floors every planned day at one cent over
+  it while days are still owed. Where the profit target is already met, those
+  days ask for $150.01 rather than nothing — a day of nothing would not be one
+  of them.
+- **Curated caps.** A cap under the bar can never reach a payout, however many
+  days it runs, so the app says that rather than counting to 252: "A day has to
+  make more than $150.00 to count towards the 2 trading days Tradeify still
+  needs, so a cap below that never gets there."
+
+The bar is "profit greater than", so a day exactly on it does not count —
+`dayQualifies(150, 150)` is false — and that is why plans aim a cent above
+(`QUALIFYING_STEP`).
+
+Like every other rule it stays editable on the dashboard, as **Profit for a day
+to count**.
 
 ## The calculations
 
@@ -386,9 +416,11 @@ in `src/lib/utils.ts`. If the CLI installs `cn` into `package.json`, remove it.
   sweep, curated reproduces conservative at the conservative cap, and every
   day count from the fastest up pays out without asking for more per day.
   Minimum trading days are covered too: plans stretch to the firm's minimum,
-  and a met target with days missing asks for nothing per day.
+  every planned day clears the profit bar that makes it count, and a cap under
+  that bar is turned down.
 - `src/lib/ledger.test.ts`: largest day and net profit from daily entries,
-  pasted formatting like `$1,200`, and weekend-aware plan dates.
+  which days clear a firm's profit bar (and that one exactly level with it does
+  not), pasted formatting like `$1,200`, and weekend-aware plan dates.
 - `src/lib/accounts.test.ts`: every template's rules, the split of an account
   into its size and type, the published payout tables (both Tradeify schedules,
   the caps that repeat, and the thresholds they imply), that each size belongs
@@ -396,8 +428,9 @@ in `src/lib/utils.ts`. If the CLI installs `cn` into `package.json`, remove it.
   default is the workbook's account.
 - `src/lib/setup.test.ts`: which walkthrough screens each path shows, including
   dropping the size screen for a single-size type and the schedule screen for
-  an account without one, how each template derives the balance, and detecting
-  storage from before the walkthrough.
+  an account without one, how each template derives the balance and counts only
+  the logged days that clear its bar, and detecting storage from before the
+  walkthrough.
 - `src/App.test.tsx`: mounts the app in jsdom and walks both walkthrough paths
   to the workbook's `$355.70` a day, covers picking a firm (the theme follows
   at once), then a type and a size (their rules follow), the size screen

@@ -174,9 +174,15 @@ export function deriveInputs(
       : summary.netProfit,
     consistencyRequirement: parseAmount(account.consistency) / 100,
     minTradingDays: Math.max(0, Math.round(parseAmount(account.minTradingDays))),
+    // Point-in-time asks for the days that count; day-by-day works out which
+    // of the logged days clear the firm's bar.
     tradingDaysSoFar: pointInTime
       ? Math.max(0, Math.round(parseAmount(source.tradingDays)))
-      : summary.tradingDays,
+      : summary.qualifyingDays,
+    qualifyingDayProfit: Math.max(
+      0,
+      parseAmount(account.qualifyingDayProfit),
+    ),
   }
 }
 

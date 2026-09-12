@@ -504,10 +504,9 @@ describe('walkthrough', () => {
     type(byLabel('Cumulative profit'), '1200')
     press('Continue')
 
-    expect(headline()).toBe(
-      'How many days have you traded since your last payout?',
-    )
+    expect(headline()).toBe('How many of your days count so far?')
     expect(text()).toContain('Tradeify needs 5 trading days')
+    expect(text()).toContain('only days making more than $150 count')
     type(byLabel('Trading days so far'), '2')
     press('Continue')
     choose('conservative')
@@ -518,6 +517,7 @@ describe('walkthrough', () => {
     expect(byLabel('Minimum payout').value).toBe('500')
     expect(byLabel('Consistency rule').value).toBe('35')
     expect(byLabel('Minimum trading days').value).toBe('5')
+    expect(byLabel('Profit for a day to count').value).toBe('150')
     expect(document.documentElement.dataset.brand).toBe('tradeify')
   })
 
@@ -716,6 +716,7 @@ describe('day-by-day dashboard', () => {
       'Minimum payout',
       'Consistency rule',
       'Minimum trading days',
+      'Profit for a day to count',
     ].map(byLabel)
     const picker = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Funded account"]',

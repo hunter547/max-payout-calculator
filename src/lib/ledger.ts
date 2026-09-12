@@ -21,6 +21,11 @@ export interface LedgerSummary {
   /** Sum of every day, losses included. */
   netProfit: number
   tradingDays: number
+  /**
+   * Days that count towards a firm's minimum: every logged day where the firm
+   * sets no profit bar, and only the days that clear it where it does.
+   */
+  qualifyingDays: number
   winningDays: number
   losingDays: number
 }
@@ -40,18 +45,29 @@ export function parseAmount(raw: string): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-export function summarize(entries: DayEntry[]): LedgerSummary {
+/** Whether a day counts towards the firm's minimum trading days. */
+export function dayQualifies(amount: number, qualifyingProfit: number): boolean {
+  // The bar is "profit greater than", so a day exactly on it does not count.
+  return qualifyingProfit > 0 ? amount > qualifyingProfit : true
+}
+
+export function summarize(
+  entries: DayEntry[],
+  qualifyingProfit = 0,
+): LedgerSummary {
   let largestProfitDay = 0
   let largestEntryId: string | null = null
   let netProfit = 0
   let winningDays = 0
   let losingDays = 0
+  let qualifyingDays = 0
 
   for (const entry of entries) {
     const amount = parseAmount(entry.amount)
     netProfit += amount
     if (amount > 0) winningDays++
     if (amount < 0) losingDays++
+    if (dayQualifies(amount, qualifyingProfit)) qualifyingDays++
     if (amount > largestProfitDay) {
       largestProfitDay = amount
       largestEntryId = entry.id
@@ -64,6 +80,7 @@ export function summarize(entries: DayEntry[]): LedgerSummary {
     // Keep cents clean: 359 - 212.4 - 140 should read 6.6, not 6.599999999.
     netProfit: Math.round(netProfit * 100) / 100,
     tradingDays: entries.length,
+    qualifyingDays,
     winningDays,
     losingDays,
   }

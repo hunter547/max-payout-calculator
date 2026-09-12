@@ -215,6 +215,15 @@ describe('account templates', () => {
     expect(hasSchedule(accountTemplate('mffu-50k-builder'))).toBe(false)
   })
 
+  it('sets the profit a day needs to count, by size', () => {
+    const bars = ACCOUNT_TEMPLATES.filter(
+      (t) => t.programId === 'tradeify-growth',
+    ).map((t) => t.qualifyingDayProfit)
+    expect(bars).toEqual([100, 150, 200, 250])
+    // The workbook's account counts every day traded.
+    expect(accountTemplate('mffu-50k-builder').qualifyingDayProfit).toBe(0)
+  })
+
   it('falls back to the default for an unknown id', () => {
     expect(accountTemplate('no-such-account').id).toBe(DEFAULT_TEMPLATE)
   })
@@ -227,6 +236,7 @@ describe('account templates', () => {
       minimumPayout: '1000',
       consistency: '35',
       minTradingDays: '5',
+      qualifyingDayProfit: '200',
     })
   })
 

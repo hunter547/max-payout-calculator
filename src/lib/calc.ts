@@ -14,8 +14,16 @@
  * so the sheet's own numbers come out unchanged.
  *
  * On top of the sheet, a firm can also require a number of trading days since
- * the last payout before it will pay at all.
+ * the last payout before it will pay at all, and set the profit a day has to
+ * beat before it counts as one of them.
  */
+
+/**
+ * A day has to make *more* than the firm's bar to count, so a plan aims one
+ * cent over it. Money is tracked to cents everywhere else, so this is the
+ * smallest step that is still a real number to trade to.
+ */
+export const QUALIFYING_STEP = 0.01
 
 export interface CalcInputs {
   /** Balance in the account's own terms; see the template's startingBalance. */
@@ -32,6 +40,12 @@ export interface CalcInputs {
   minTradingDays: number
   /** Trading days already behind you in this payout cycle. */
   tradingDaysSoFar: number
+  /**
+   * Profit a day must beat to count towards `minTradingDays`; 0 where the firm
+   * counts every trading day. A planned day has to clear it too, or it buys
+   * profit without buying eligibility.
+   */
+  qualifyingDayProfit: number
 }
 
 export interface CalcResults {
@@ -51,6 +65,8 @@ export interface CalcResults {
   targetMet: boolean
   /** Trading days still needed purely to qualify for a payout. */
   eligibilityDaysLeft: number
+  /** What a planned day must make to count, once eligibility is what binds. */
+  qualifyingDailyProfit: number
   /** Both the profit and the trading days are covered. */
   payoutReady: boolean
   /** Does the existing largest profit day satisfy the consistency rule? */
@@ -79,6 +95,7 @@ export function calculate(inputs: CalcInputs): CalcResults {
     consistencyRequirement: consistency,
     minTradingDays,
     tradingDaysSoFar,
+    qualifyingDayProfit,
   } = inputs
 
   // E3 =MAX(minimum payout, threshold - balance)
@@ -129,6 +146,12 @@ export function calculate(inputs: CalcInputs): CalcResults {
     maxAllowedSingleDay,
     targetMet,
     eligibilityDaysLeft,
+    // Only binds while days are still owed: once they are, a planned day is
+    // just profit and can be any size.
+    qualifyingDailyProfit:
+      eligibilityDaysLeft > 0 && qualifyingDayProfit > 0
+        ? qualifyingDayProfit + QUALIFYING_STEP
+        : 0,
     payoutReady: targetMet && eligibilityDaysLeft === 0,
     largestDayWithinConsistency:
       Math.abs(largestProfitDay) <= maxAllowedSingleDay + 1e-9,
@@ -199,7 +222,11 @@ function dailyFor(
   const F = inputs.currentNetProfit
   const G = inputs.consistencyRequirement
   const gn = G * n
-  let lo = results.remainingProfitNeeded / n
+  // Days owed to the firm have to count, and equal days mean all of them do.
+  let lo = Math.max(
+    results.remainingProfitNeeded / n,
+    results.qualifyingDailyProfit,
+  )
   let hi = Infinity
 
   if (Math.abs(gn - 1) < 1e-9) {
@@ -253,10 +280,14 @@ function planOf(
   days: number,
 ): Plan {
   const G = inputs.consistencyRequirement
-  // With the profit target met, the days left are the firm's, not the maths'.
+  // With the profit target met, the days left are the firm's, not the maths' —
+  // but they still have to clear the bar the firm counts them by.
   const dailyProfit = results.targetMet
-    ? 0
-    : (dailyFor(inputs, results, days) ?? results.dailyProfitNeeded)
+    ? results.qualifyingDailyProfit
+    : Math.max(
+        dailyFor(inputs, results, days) ?? results.dailyProfitNeeded,
+        results.qualifyingDailyProfit,
+      )
   const largest = Math.max(Math.abs(inputs.largestProfitDay), dailyProfit)
   const requiredProfit =
     G > 0

@@ -13,7 +13,7 @@ interface TargetBreakdownProps {
   /** The payout being worked towards, for accounts with a schedule. */
   payout: { number: number; cap: number; repeats: boolean } | null
   /** Null in point-in-time mode, where days aren't logged one by one. */
-  tradingDays: number | null
+  tradingDays: { logged: number; counting: number } | null
   consistencyInvalid: boolean
 }
 
@@ -56,7 +56,7 @@ export function TargetBreakdown({
       note:
         tradingDays === null
           ? 'Since the last payout.'
-          : `${tradingDays} trading ${tradingDays === 1 ? 'day' : 'days'} since the last payout.`,
+          : `${tradingDays.logged} trading ${tradingDays.logged === 1 ? 'day' : 'days'} since the last payout.`,
     },
     {
       label: 'Still needed',
@@ -88,10 +88,20 @@ export function TargetBreakdown({
     rows.push({
       label: 'Trading days',
       value: `${Math.min(inputs.tradingDaysSoFar, inputs.minTradingDays)} of ${inputs.minTradingDays}`,
-      note:
+      note: [
+        inputs.qualifyingDayProfit > 0
+          ? `Only days over ${formatRule(inputs.qualifyingDayProfit)} count${
+              tradingDays && tradingDays.counting < tradingDays.logged
+                ? `, so ${tradingDays.counting} of your ${tradingDays.logged} do`
+                : ''
+            }.`
+          : null,
         results.eligibilityDaysLeft > 0
           ? `${results.eligibilityDaysLeft} more before this firm will pay out.`
           : 'The firm’s minimum is covered.',
+      ]
+        .filter(Boolean)
+        .join(' '),
     })
   }
 

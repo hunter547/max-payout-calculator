@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  dayQualifies,
   isAmount,
   nextTradingDate,
   parseAmount,
@@ -14,6 +15,33 @@ const day = (id: string, date: string, amount: string): DayEntry => ({
   id,
   date,
   amount,
+})
+
+describe('summarize — qualifying days', () => {
+  const days = [
+    { id: 'a', date: '2026-09-08', amount: '359' },
+    { id: 'b', date: '2026-09-09', amount: '-212.40' },
+    { id: 'c', date: '2026-09-10', amount: '150' },
+    { id: 'd', date: '2026-09-11', amount: '151' },
+    { id: 'e', date: '2026-09-14', amount: '0' },
+  ]
+
+  it('counts every logged day where the firm sets no bar', () => {
+    const summary = summarize(days)
+    expect(summary.tradingDays).toBe(5)
+    expect(summary.qualifyingDays).toBe(5)
+  })
+
+  it('counts only the days that beat the bar, not those level with it', () => {
+    const summary = summarize(days, 150)
+    expect(summary.tradingDays).toBe(5)
+    // 359 and 151 clear $150; the 150 itself does not, nor the loss or the
+    // flat day.
+    expect(summary.qualifyingDays).toBe(2)
+    expect(dayQualifies(150, 150)).toBe(false)
+    expect(dayQualifies(150.01, 150)).toBe(true)
+    expect(dayQualifies(-5, 0)).toBe(true)
+  })
 })
 
 describe('summarize', () => {

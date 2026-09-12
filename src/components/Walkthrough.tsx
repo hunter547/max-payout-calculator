@@ -192,8 +192,15 @@ function stepCopy(step: StepId, draft: SetupDraft) {
       }
     case 'tradingDays':
       return {
-        title: 'How many days have you traded since your last payout?',
-        lead: `${firmOf(template).name} needs ${template.minTradingDays} trading ${template.minTradingDays === 1 ? 'day' : 'days'} before it will pay out. Enter 0 if this cycle is fresh.`,
+        title:
+          template.qualifyingDayProfit > 0
+            ? 'How many of your days count so far?'
+            : 'How many days have you traded since your last payout?',
+        lead: `${firmOf(template).name} needs ${template.minTradingDays} trading ${template.minTradingDays === 1 ? 'day' : 'days'} before it will pay out${
+          template.qualifyingDayProfit > 0
+            ? `, and only days making more than ${formatRule(template.qualifyingDayProfit)} count towards them`
+            : ''
+        }. Enter 0 if this cycle is fresh.`,
       }
     case 'days':
       return {
@@ -290,7 +297,13 @@ export function Walkthrough({
   const copy = stepCopy(step, draft)
 
   const sortedDays = useMemo(() => sortByDate(draft.days), [draft.days])
-  const daySummary = useMemo(() => summarize(sortedDays), [sortedDays])
+  const qualifyingDayProfit = draft.templateId
+    ? accountTemplate(draft.templateId).qualifyingDayProfit
+    : 0
+  const daySummary = useMemo(
+    () => summarize(sortedDays, qualifyingDayProfit),
+    [sortedDays, qualifyingDayProfit],
+  )
 
   // Each strategy's plan for the numbers entered so far, on the account's
   // own rules.
@@ -523,7 +536,9 @@ export function Walkthrough({
                       ? `One size: ${sizes[0].name}`
                       : `${sizes.length} sizes: ${sizes.map((s) => s.name).join(', ')}`,
                     `${formatPercent(sizes[0].consistency)} consistency rule`,
-                    `${days} trading ${days === 1 ? 'day' : 'days'} minimum`,
+                    sizes[0].qualifyingDayProfit > 0
+                      ? `${days} trading ${days === 1 ? 'day' : 'days'} minimum, each over a set profit`
+                      : `${days} trading ${days === 1 ? 'day' : 'days'} minimum`,
                     graduated
                       ? 'Payouts capped by how many you have taken'
                       : `${formatRule(sizes[0].payout.caps[0])} max payout per request`,
@@ -557,6 +572,11 @@ export function Walkthrough({
                   // the trader is actually on.
                   `${formatRule(payoutThreshold(template.payout, 0))} balance for a ${formatRule(payoutCap(template.payout, 0))} first payout`,
                   `${formatRule(template.payout.minimumPayout)} minimum payout`,
+                  ...(template.qualifyingDayProfit > 0
+                    ? [
+                        `A day counts once it makes over ${formatRule(template.qualifyingDayProfit)}`,
+                      ]
+                    : []),
                 ]}
               />
             </ChoiceCard>
