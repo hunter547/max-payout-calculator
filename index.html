@@ -10,6 +10,24 @@
     />
     <title>Max Payout Calculator</title>
 
+    <!-- Apply the saved theme before first paint, so a dark or brand theme
+         doesn't flash the default one while the app loads. The app writes
+         mpc.appearance whenever the theme changes. -->
+    <script>
+      try {
+        var saved = JSON.parse(localStorage.getItem('mpc.appearance') || 'null')
+        var root = document.documentElement
+        var scheme = saved
+          ? saved.scheme
+          : window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light'
+        if (saved) root.dataset.brand = saved.brand
+        if (scheme === 'dark') root.classList.add('dark')
+        root.style.colorScheme = scheme
+      } catch (e) {}
+    </script>
+
     <!-- Link previews in chat apps. Set VITE_SITE_URL in .env so the image
          URL is absolute; many apps ignore a relative one. -->
     <meta property="og:type" content="website" />

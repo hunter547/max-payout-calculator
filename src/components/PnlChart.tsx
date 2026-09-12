@@ -238,7 +238,7 @@ export function PnlChart({ bars, cap, className }: PnlChartProps) {
                   x2={width - PAD.right}
                   y1={y(cap)}
                   y2={y(cap)}
-                  className="stroke-plan"
+                  className="stroke-cap"
                   strokeWidth={2}
                 />
                 <text
@@ -320,7 +320,7 @@ export function PnlChart({ bars, cap, className }: PnlChartProps) {
           )}
           {cap > 0 && (
             <span className="inline-flex items-center gap-2">
-              <span aria-hidden="true" className="h-0.5 w-4 bg-plan" />
+              <span aria-hidden="true" className="h-0.5 w-4 bg-cap" />
               Daily cap
             </span>
           )}

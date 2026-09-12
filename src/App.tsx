@@ -10,6 +10,7 @@ import { Ledger } from '@/components/Ledger'
 import { PnlChart, type ChartBar } from '@/components/PnlChart'
 import { SnapshotPanel } from '@/components/SnapshotPanel'
 import { TargetBreakdown } from '@/components/TargetBreakdown'
+import { ThemePicker } from '@/components/ThemePicker'
 import { Walkthrough, type WalkthroughResult } from '@/components/Walkthrough'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -20,7 +21,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { usePersistentState, useTheme, type Theme } from '@/hooks'
+import { useAppearance, usePersistentState, type Appearance } from '@/hooks'
 import {
   buildPlan,
   calculate,
@@ -149,15 +150,13 @@ function verdict(
 }
 
 function AppHeader({
-  theme,
-  onToggleTheme,
+  appearance,
   children,
 }: {
-  theme: Theme
-  onToggleTheme: () => void
+  appearance: Appearance
   children?: ReactNode
 }) {
-  const nextTheme = theme === 'dark' ? 'light' : 'dark'
+  const nextScheme = appearance.scheme === 'dark' ? 'light' : 'dark'
   return (
     <header className="flex items-center justify-between gap-4 py-5">
       <div className="leading-tight">
@@ -170,26 +169,33 @@ function AppHeader({
       </div>
       <div className="flex items-center gap-1">
         {children}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={`Switch to ${nextTheme} theme`}
-              onClick={onToggleTheme}
-            >
-              {theme === 'dark' ? <Sun /> : <Moon />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Switch to {nextTheme} theme</TooltipContent>
-        </Tooltip>
+        <ThemePicker
+          value={appearance.theme.id}
+          onChange={appearance.setBrand}
+        />
+        {/* Single-mode themes (dark-only firm brands) have nothing to toggle. */}
+        {appearance.canToggleScheme && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Switch to ${nextScheme} mode`}
+                onClick={appearance.toggleScheme}
+              >
+                {appearance.scheme === 'dark' ? <Sun /> : <Moon />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Switch to {nextScheme} mode</TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </header>
   )
 }
 
 export default function App() {
-  const [theme, setTheme] = useTheme()
+  const appearance = useAppearance()
   const [setup, setSetup] = usePersistentState<Setup | null>(
     'mpc.setup',
     legacySetup,
@@ -275,8 +281,6 @@ export default function App() {
     return [...recorded, ...planned]
   }, [approach, sorted, summary, inputs, plan, consistencyInvalid])
 
-  const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark')
-
   function finishWalkthrough(result: WalkthroughResult) {
     setSetup({
       approach: result.approach,
@@ -315,7 +319,7 @@ export default function App() {
     return (
       <TooltipProvider delayDuration={200}>
         <div className="mx-auto max-w-6xl px-4 sm:px-8">
-          <AppHeader theme={theme} onToggleTheme={toggleTheme} />
+          <AppHeader appearance={appearance} />
           <Walkthrough
             initial={initial}
             rules={account}
@@ -369,7 +373,7 @@ export default function App() {
   return (
     <TooltipProvider delayDuration={200}>
       <div className="mx-auto max-w-6xl px-4 pb-16 sm:px-8">
-        <AppHeader theme={theme} onToggleTheme={toggleTheme}>
+        <AppHeader appearance={appearance}>
           {/* Icon-only on phones so the app name keeps its two lines. */}
           <Button
             variant="ghost"

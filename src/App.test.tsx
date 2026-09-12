@@ -30,6 +30,9 @@ let root: Root
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
   window.localStorage.clear()
+  // Themes write to <html>, which outlives each test's container.
+  delete document.documentElement.dataset.brand
+  document.documentElement.classList.remove('dark')
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -473,6 +476,58 @@ describe('day-by-day dashboard', () => {
 
     expect(text()).not.toMatch(/\b[A-K]3\b/)
     expect(text()).not.toContain('=MAX')
+  })
+})
+
+// Picking from the menu is tested in ThemePicker.test.tsx; see why there.
+describe('color themes', () => {
+  const root = document.documentElement
+  const modeToggle = () =>
+    container.querySelector('button[aria-label^="Switch to"]')
+
+  it('starts on the default theme with a light/dark toggle', () => {
+    seedDashboard()
+    seed({ 'mpc.theme': 'light' })
+    render()
+
+    expect(root.dataset.brand).toBe('default')
+    expect(root.classList.contains('dark')).toBe(false)
+    expect(modeToggle()).not.toBeNull()
+  })
+
+  it('applies MyFundedFutures globally and dark only', () => {
+    seedDashboard()
+    seed({ 'mpc.theme': 'light', 'mpc.brand': 'mffu' })
+    render()
+
+    expect(root.dataset.brand).toBe('mffu')
+    expect(root.classList.contains('dark')).toBe(true)
+    expect(modeToggle()).toBeNull()
+    // The light preference is kept for when a two-mode theme comes back.
+    expect(JSON.parse(window.localStorage.getItem('mpc.theme')!)).toBe('light')
+    // What index.html applies before first paint on the next visit.
+    expect(
+      JSON.parse(window.localStorage.getItem('mpc.appearance')!),
+    ).toEqual({ brand: 'mffu', scheme: 'dark' })
+  })
+
+  it('is available from the first walkthrough screen', () => {
+    seed({ 'mpc.brand': 'mffu' })
+    render()
+
+    expect(headline()).toBe('How do you want to track this payout?')
+    expect(root.dataset.brand).toBe('mffu')
+    expect(
+      container.querySelector('button[aria-label="Color theme"]'),
+    ).not.toBeNull()
+  })
+
+  it('falls back to the default for a theme that no longer exists', () => {
+    seedDashboard()
+    seed({ 'mpc.brand': 'retired-firm' })
+    render()
+
+    expect(root.dataset.brand).toBe('default')
   })
 })
 

@@ -204,6 +204,35 @@ in `src/lib/utils.ts`. If the CLI installs `cn` into `package.json`, remove it.
   balance, validation, reopening and cancelling, and both dashboards' editing,
   removing, invalid input, and target-met states.
 
+## Color themes
+
+The palette is a swappable theme, picked from the palette icon in the header
+and saved in the browser (`mpc.brand`). It applies to the whole app, walkthrough
+included.
+
+| Theme | Modes | Source |
+|-------|-------|--------|
+| Default | light and dark | the app's own palette |
+| MyFundedFutures | dark only | colors and typeface (Lexend) from myfundedfutures.com |
+
+A dark-only theme hides the light/dark toggle; the trader's light/dark
+preference is kept and comes back with a theme that has both.
+
+Themes are meant to follow the trader's prop firm later on. To add one:
+
+1. In `src/index.css`, add its tokens under `:root[data-brand='<id>']`, and
+   under `:root[data-brand='<id>'].dark` too if it has both modes. Give every
+   token the default theme sets a value, including the chart roles
+   `--profit`, `--loss`, `--plan`, `--grid`, and `--axis`. To use the firm's
+   typeface, also set `--font-sans` and import the font at the top of the
+   file (fonts only download for the theme that uses them).
+2. Register it in `src/lib/themes.ts` with its name, modes, and three picker
+   swatches.
+3. Check the chart's profit, loss, and plan colors against the theme's card
+   color: at least 3:1 contrast each, and far enough apart to tell under
+   color blindness. The chart also separates profit and loss by direction,
+   but color should hold up on its own.
+
 ## Link previews
 
 Pasting the site's link into a chat app shows `public/og-image.png`
