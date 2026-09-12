@@ -54,6 +54,7 @@ import {
   type SetupDraft,
   type Snapshot,
 } from '@/lib/setup'
+import { BRAND_THEMES } from '@/lib/themes'
 
 /** Account rules exactly as saved in the workbook. */
 const RULE_DEFAULTS = {
@@ -68,6 +69,14 @@ const ACCOUNT_DEFAULTS: Record<AccountKey, string> = {
 }
 
 const SNAPSHOT_DEFAULTS: Snapshot = { largestProfitDay: '', netProfit: '' }
+
+/** Every firm whose name and logo the app shows, for the footer disclaimer. */
+const FIRMS = BRAND_THEMES.filter((t) => t.logo).map((t) => t.name)
+const DISCLAIMER = `Not affiliated with or endorsed by ${
+  FIRMS.length <= 2
+    ? FIRMS.join(' or ')
+    : `${FIRMS.slice(0, -1).join(', ')}, or ${FIRMS[FIRMS.length - 1]}`
+}.`
 
 const EMPTY_DRAFT: SetupDraft = {
   approach: null,
@@ -157,15 +166,22 @@ function AppHeader({
   children?: ReactNode
 }) {
   const nextScheme = appearance.scheme === 'dark' ? 'light' : 'dark'
+  const logo = appearance.theme.logo
   return (
     <header className="flex items-center justify-between gap-4 py-5">
       <div className="leading-tight">
+        {/* A firm theme leads with the firm's own logo instead of the subtitle. */}
+        {logo && (
+          <img src={logo.src} alt={logo.alt} className="mb-1.5 block h-5 w-auto" />
+        )}
         <p className="font-expanded text-base font-bold">
           Max payout calculator
         </p>
-        <p className="text-sm text-muted-foreground">
-          MyFundedFutures 50k Builder
-        </p>
+        {!logo && (
+          <p className="text-sm text-muted-foreground">
+            MyFundedFutures 50k Builder
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-1">
         {children}
@@ -509,7 +525,8 @@ export default function App() {
         </main>
 
         <footer className="mt-20 border-t pt-5 text-sm text-muted-foreground">
-          Your entries are saved in this browser only.
+          <p>Your entries are saved in this browser only.</p>
+          <p className="mt-1">{DISCLAIMER}</p>
         </footer>
       </div>
     </TooltipProvider>

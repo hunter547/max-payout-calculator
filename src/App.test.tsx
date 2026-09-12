@@ -523,6 +523,16 @@ describe('color themes', () => {
       expect(root.dataset.brand).toBe(theme.id)
       expect(root.classList.contains('dark')).toBe(!theme.schemes.includes('light'))
       expect(modeToggle() !== null).toBe(theme.schemes.length > 1)
+
+      // Firm themes swap the subtitle for the firm's logo.
+      const logo = container.querySelector('header img')
+      if (theme.logo) {
+        expect(logo?.getAttribute('alt')).toBe(theme.logo.alt)
+        expect(text()).not.toContain('MyFundedFutures 50k Builder')
+      } else {
+        expect(logo).toBeNull()
+        expect(text()).toContain('MyFundedFutures 50k Builder')
+      }
     },
   )
 
@@ -543,6 +553,17 @@ describe('color themes', () => {
     render()
 
     expect(root.dataset.brand).toBe('default')
+  })
+
+  it('says in the footer the app is not affiliated with the firms it shows', () => {
+    seedDashboard()
+    render()
+
+    const footer = container.querySelector('footer')?.textContent
+    expect(footer).toContain('Your entries are saved in this browser only.')
+    expect(footer).toContain(
+      'Not affiliated with or endorsed by MyFundedFutures or Tradeify.',
+    )
   })
 })
 

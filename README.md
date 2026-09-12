@@ -216,6 +216,13 @@ included.
 | MyFundedFutures | dark only | colors and typeface (Lexend) from myfundedfutures.com |
 | Tradeify | dark only | colors and typeface (Mona Sans) from tradeify.co |
 
+Firm themes also show the firm's logo in the header, in place of the
+subtitle. The SVGs in `src/assets/brands/` are the white-on-dark logos from
+each firm's own site header; a comment in each file records the source URL.
+The footer says the app isn't affiliated with or endorsed by those firms; the
+list is built from the themes that have a logo, so a new firm joins it
+automatically.
+
 A dark-only theme hides the light/dark toggle; the trader's light/dark
 preference is kept and comes back with a theme that has both.
 
@@ -228,7 +235,8 @@ Themes are meant to follow the trader's prop firm later on. To add one:
    typeface, also set `--font-sans` and import the font at the top of the
    file (fonts only download for the theme that uses them).
 2. Register it in `src/lib/themes.ts` with its name, modes, and three picker
-   swatches.
+   swatches, plus its logo if it has one (an SVG in `src/assets/brands/`,
+   drawn for the theme's background).
 3. Check the chart's profit, loss, and plan colors against the theme's card
    color: at least 3:1 contrast each, and far enough apart to tell under
    color blindness. The chart also separates profit and loss by direction,
