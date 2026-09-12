@@ -215,6 +215,36 @@ describe('account templates', () => {
     expect(hasSchedule(accountTemplate('mffu-50k-builder'))).toBe(false)
   })
 
+  it('carries the Builder sizes, which are the same rules halved', () => {
+    const sizes = [
+      ['mffu-25k-builder', 1100, 1000, 250],
+      ['mffu-50k-builder', 2100, 2000, 500],
+    ] as const
+
+    for (const [id, floor, cap, minimumPayout] of sizes) {
+      const template = accountTemplate(id)
+      expect(template).toMatchObject({
+        programId: 'mffu-builder',
+        // A funded Builder starts at zero and counts profit up.
+        startingBalance: 0,
+        consistency: 0.5,
+        minTradingDays: 2,
+        qualifyingDayProfit: 0,
+      })
+      // The buffer is the max loss limit plus $100, and the firm wants the
+      // minimum payout in profit above it.
+      expect(template.payout).toMatchObject({ caps: [cap], floor, minimumPayout })
+      // The buffer is withheld, not a level the account dies at.
+      expect(template.payout.floorBreaches).toBeUndefined()
+      // Buffer plus cap, whatever the payout number: the caps are flat.
+      expect(payoutThreshold(template.payout, 0)).toBe(floor + cap)
+      expect(payoutThreshold(template.payout, 9)).toBe(floor + cap)
+      expect(hasSchedule(template)).toBe(false)
+    }
+
+    expect(sizesFor('mffu-builder').map((t) => t.name)).toEqual(['25k', '50k'])
+  })
+
   it('sets the profit a day needs to count, by size', () => {
     const bars = ACCOUNT_TEMPLATES.filter(
       (t) => t.programId === 'tradeify-growth',

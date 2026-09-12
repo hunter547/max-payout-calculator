@@ -1,6 +1,11 @@
 /** @vitest-environment jsdom */
 import { beforeEach, describe, expect, it } from 'vitest'
-import { accountFor, accountTemplate } from './accounts'
+import {
+  accountFor,
+  accountTemplate,
+  ACCOUNT_PROGRAMS,
+  sizesFor,
+} from './accounts'
 import { summarize } from './ledger'
 import { balanceHint, deriveInputs, legacySetup, stepsFor, toCuratedChoice } from './setup'
 
@@ -47,11 +52,25 @@ describe('stepsFor', () => {
     ])
   })
 
+  it('shows the size screen only where a type comes in more than one', () => {
+    for (const program of ACCOUNT_PROGRAMS) {
+      const sizes = sizesFor(program.id)
+      const steps = stepsFor({
+        approach: 'pointInTime',
+        payoutTaken: null,
+        programId: program.id,
+        templateId: sizes[0].id,
+      })
+      expect(steps.includes('size')).toBe(sizes.length > 1)
+    }
+  })
+
   it('drops the size screen for a type that comes in one size', () => {
+    // No registered type is single-size today, so this pins the rule itself.
     const steps = stepsFor({
       approach: 'pointInTime',
       payoutTaken: null,
-      programId: 'mffu-builder',
+      programId: 'single-size-type',
       templateId: 'mffu-50k-builder',
     })
     expect(steps.slice(0, 3)).toEqual(['firm', 'program', 'approach'])

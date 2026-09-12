@@ -34,7 +34,8 @@ things: the type carries the rules (consistency, minimum trading days, how
 payouts are capped) and the size carries the money (where the balance starts,
 the minimum payout, and what a max payout needs). Whichever the firm settles on
 its own it fills in — a firm with one type picks it, and a type with one size
-skips the size screen entirely.
+skips the size screen entirely. Both firms offer more than one size today, so
+both ask.
 
 Accounts whose payouts are graduated, or whose terms changed on a date, then
 get one more screen: **where are you in your payout schedule?** It asks how many
@@ -131,6 +132,7 @@ the lock, and "Restore defaults" puts the template's rules back.
 
 | Firm | Type | Size | Starts at | Qualifying balance | Consistency | Minimum days | A day counts over | Minimum payout |
 |------|------|------|-----------|--------------------|-------------|--------------|-------------------|----------------|
+| MyFundedFutures | Builder | 25k | $0 | — | 50% | 2 | every day | $250 |
 | MyFundedFutures | Builder | 50k | $0 | — | 50% | 2 | every day | $500 |
 | Tradeify | Growth | 25k | $25,000 | $26,500 | 35% | 5 | $100 | $250 |
 | Tradeify | Growth | 50k | $50,000 | $53,000 | 35% | 5 | $150 | $500 |
@@ -164,7 +166,12 @@ which is the number written into the dashboard's "Balance for max payout".
 The workbook's own account is the simple case: its payout buffer is the floor
 ($2,100) and its payout cap the one withdrawal cap ($2,000), so they still add
 to $4,100 whatever the payout number. Its buffer is withheld rather than a fail
-level, so `room` does not apply to it.
+level, so `buffer` does not apply to it.
+
+The Builder 25k is the same rules halved, which is what confirms the shape: its
+buffer is $1,100 — the account's $1,000 max loss limit plus $100 — its cap
+$1,000, and its minimum payout $250, the profit MyFundedFutures wants above the
+buffer. Balance for a max payout: $2,100.
 
 ### Drawdown room
 
@@ -225,7 +232,8 @@ qualifying balance; see [Drawdown room](#drawdown-room).
 the caps graduate or a before-cutoff schedule exists. A firm added later with
 either gets the walkthrough screen and the dashboard controls for free.
 
-Sourced from [Growth Funded: Account Payout
+Sourced from [Builder Plan 25k](https://help.myfundedfutures.com/en/articles/15862870-builder-plan-25k-a-comprehensive-guide),
+[Growth Funded: Account Payout
 Policy](https://help.tradeify.co/en/articles/11083796-growth-funded-account-payout-policy),
 [Growth Evaluation
 Accounts](https://help.tradeify.co/en/articles/10495915-growth-evaluation-accounts)
@@ -233,7 +241,9 @@ and [Rules: Trailing Max
 Drawdowns](https://help.tradeify.co/en/articles/10495897-rules-trailing-max-drawdowns).
 
 The MyFundedFutures 50k Builder is the default and the workbook's own account,
-so its numbers are the ones the calculation tests pin. Template ids keep the
+so its numbers are the ones the calculation tests pin. It is no longer the
+first entry in the registry, so `accountTemplate` falls back to it by id rather
+than by position. Template ids keep the
 old `firm-size-type` spelling (`mffu-50k-builder`), so saved setups survive.
 
 To add a size, add an entry to `ACCOUNT_TEMPLATES` with its `programId` and a

@@ -180,7 +180,7 @@ describe('walkthrough', () => {
     )
     expect(logos).toEqual(['MyFundedFutures logo', 'Tradeify logo'])
     expect(text()).toContain('Builder accounts')
-    expect(text()).toContain('One size: 50k')
+    expect(text()).toContain('2 sizes, 25k to 50k')
     expect(text()).toContain('Growth accounts')
     expect(text()).toContain('4 sizes, 25k to 150k')
     expect(text()).toContain('35% consistency rule')
@@ -242,19 +242,27 @@ describe('walkthrough', () => {
     expect(headline()).toBe('Where are you in your payout schedule?')
   })
 
-  it('skips the size screen for a type that comes in one size', () => {
+  it('offers the Builder sizes, whose rules are the same halved', () => {
     render()
     choose('mffu')
     press('Continue')
 
     expect(headline()).toBe('Which account type?')
-    expect(text()).toContain('One size: 50k')
-    expect(text()).toContain('$2,000 max payout per request')
+    expect(text()).toContain('2 sizes: 25k, 50k')
+    expect(text()).toContain('50% consistency rule')
 
-    // Builder is already chosen with the firm, and its one size with it.
     press('Continue')
+    expect(headline()).toBe('Which account size?')
+    expect(text()).toContain('$2,100 balance for a $1,000 first payout')
+    expect(text()).toContain('$250 minimum payout')
+    expect(text()).toContain('$4,100 balance for a $2,000 first payout')
+
+    choose('mffu-25k-builder')
+    press('Continue')
+
+    // Flat caps and one schedule, so no payout schedule screen.
     expect(headline()).toBe('How do you want to track this payout?')
-    expect(header()).toContain('MyFundedFutures 50k Builder')
+    expect(header()).toContain('MyFundedFutures 25k Builder')
   })
 
   it('asks about the approach next', () => {
@@ -472,7 +480,12 @@ describe('walkthrough', () => {
     press('Back')
     choose('mffu')
     expect(document.documentElement.dataset.brand).toBe('mffu')
-    // Its one type, and that type's one size, come with it.
+    // Its one type comes with it, but Builder has two sizes, so the header
+    // waits until one is picked.
+    expect(header()).not.toContain('Builder')
+    press('Continue')
+    press('Continue')
+    choose('mffu-50k-builder')
     expect(header()).toContain('MyFundedFutures 50k Builder')
   })
 

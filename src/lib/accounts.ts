@@ -129,6 +129,24 @@ export interface AccountTemplate {
 
 export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
   {
+    // The same shape as the 50k below, halved: the buffer is the account's
+    // max loss limit plus $100, and the minimum payout is the profit the firm
+    // wants above that buffer.
+    id: 'mffu-25k-builder',
+    programId: 'mffu-builder',
+    name: '25k',
+    startingBalance: 0,
+    consistency: 0.5,
+    minTradingDays: 2,
+    qualifyingDayProfit: 0,
+    payout: {
+      caps: [1000],
+      minimumPayout: 250,
+      qualifyingBalance: 0,
+      floor: 1100,
+    },
+  },
+  {
     // The workbook's own account: its payout buffer is the floor, and its
     // payout cap the one withdrawal cap, so the two still add to $4,100.
     id: 'mffu-50k-builder',
@@ -279,7 +297,11 @@ export function defaultBuffer(template: AccountTemplate): number {
 export const DEFAULT_TEMPLATE = 'mffu-50k-builder'
 
 export function accountTemplate(id: string): AccountTemplate {
-  return ACCOUNT_TEMPLATES.find((t) => t.id === id) ?? ACCOUNT_TEMPLATES[0]
+  return (
+    ACCOUNT_TEMPLATES.find((t) => t.id === id) ??
+    ACCOUNT_TEMPLATES.find((t) => t.id === DEFAULT_TEMPLATE) ??
+    ACCOUNT_TEMPLATES[0]
+  )
 }
 
 /** The firm for an id, falling back to the first for unknown ids. */
