@@ -1,13 +1,30 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Info } from 'lucide-react'
 import { CuratedControls } from '@/components/CuratedControls'
+import { FirmLogo } from '@/components/FirmLogo'
 import { Ledger } from '@/components/Ledger'
 import { MoneyField } from '@/components/MoneyField'
+import { ScheduleControls } from '@/components/ScheduleControls'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import {
+  accountFor,
+  accountLabel,
+  accountsFor,
+  accountTemplate,
+  defaultBuffer,
+  firm,
+  firmOf,
+  FIRMS,
+  payoutCap,
+  payoutThreshold,
+  program,
+  programsFor,
+  sizesFor,
+} from '@/lib/accounts'
 import {
   calculate,
   fastestDays,
@@ -16,22 +33,23 @@ import {
   type Plan,
   type Strategy,
 } from '@/lib/calc'
-import { formatCurrency } from '@/lib/format'
+import { formatCurrency, formatPercent, formatRule } from '@/lib/format'
 import {
   isAmount,
   newId,
+  parseAmount,
   sortByDate,
   suggestDate,
   summarize,
   type DayEntry,
 } from '@/lib/ledger'
 import {
+  balanceHint,
   deriveInputs,
   resolvePlan,
   stepsFor,
   toCuratedChoice,
   type Approach,
-  type Rules,
   type SetupDraft,
   type StepId,
 } from '@/lib/setup'
@@ -46,9 +64,11 @@ export interface WalkthroughResult
 
 interface WalkthroughProps {
   initial: SetupDraft
-  /** Account rules, used to preview each strategy's plan. */
-  rules: Rules
   onFinish: (result: WalkthroughResult) => void
+  /** Fires as the firm is picked, so the app can move to its theme at once. */
+  onFirmChange?: (firmId: string) => void
+  /** Fires as the account is picked; empty when the firm change cleared it. */
+  onAccountChange?: (templateId: string) => void
   /** Present when reopened from the dashboard, so the trader can back out. */
   onCancel?: () => void
 }
@@ -62,7 +82,7 @@ const APPROACHES: {
   {
     value: 'pointInTime',
     title: 'Point-in-time',
-    summary: 'Copy three numbers from your account. The quickest way to an answer.',
+    summary: 'Copy a few numbers from your account. The quickest way to an answer.',
     provides: [
       'Current balance',
       'Largest profit day',
@@ -70,13 +90,14 @@ const APPROACHES: {
         Cumulative profit,{' '}
         <strong className="font-semibold">which resets after each payout</strong>
       </>,
+      'Trading days so far',
     ],
   },
   {
     value: 'dayByDay',
     title: 'Day-by-day',
     summary:
-      'Log each trading day. Your largest day and cumulative profit are worked out for you.',
+      'Log each trading day. Your largest day, cumulative profit, and trading days are worked out for you.',
     provides: [
       'Each day’s profit, positive or negative',
       <>
@@ -119,8 +140,31 @@ function planText(plan: Plan): string {
   return `${plan.days} ${plan.days === 1 ? 'day' : 'days'} at ${formatCurrency(plan.dailyProfit)}`
 }
 
-function stepCopy(step: StepId, payoutTaken: boolean | null) {
+function stepCopy(step: StepId, draft: SetupDraft) {
+  const template = accountTemplate(draft.templateId)
   switch (step) {
+    case 'firm':
+      return {
+        title: 'Which prop firm?',
+        lead: 'Pick where your funded account is. The app takes on the firm’s look, and its rules fill in as you go.',
+      }
+    case 'program':
+      return {
+        title: 'Which account type?',
+        lead: `The type sets ${firm(draft.firmId).name}’s rules for you: its consistency rule and the trading days a payout needs. You can adjust them later.`,
+      }
+    case 'size':
+      return {
+        title: 'Which account size?',
+        lead: 'The size sets where your balance starts and the balance a max payout needs.',
+      }
+    case 'payouts':
+      return {
+        title: 'Where are you in your payout schedule?',
+        lead: `${firmOf(template).name} caps each payout by how many you have taken, so the count sets your target${
+          template.before ? ', as does when you bought the account' : ''
+        }. You also set the buffer a payout leaves behind, which the firm does not fix for you.`,
+      }
     case 'approach':
       return {
         title: 'How do you want to track this payout?',
@@ -134,7 +178,7 @@ function stepCopy(step: StepId, payoutTaken: boolean | null) {
     case 'balance':
       return {
         title: 'What’s your current balance?',
-        lead: 'Your funded account balance, which starts at $0 when the account is funded.',
+        lead: balanceHint(draft.templateId),
       }
     case 'largest':
       return {
@@ -146,10 +190,15 @@ function stepCopy(step: StepId, payoutTaken: boolean | null) {
         title: 'What’s your cumulative profit since your last payout?',
         lead: 'Winning days minus losing days. It resets to zero after each payout, and it can be negative.',
       }
+    case 'tradingDays':
+      return {
+        title: 'How many days have you traded since your last payout?',
+        lead: `${firmOf(template).name} needs ${template.minTradingDays} trading ${template.minTradingDays === 1 ? 'day' : 'days'} before it will pay out. Enter 0 if this cycle is fresh.`,
+      }
     case 'days':
       return {
         title: 'Log each trading day',
-        lead: payoutTaken
+        lead: draft.payoutTaken
           ? 'Add every day since your last payout, losing days too. You can add more later.'
           : 'Add every day since the account was funded, losing days too. Your balance is worked out from these, and you can add more later.',
       }
@@ -165,12 +214,15 @@ function ChoiceCard({
   id,
   value,
   title,
+  logo,
   className,
   children,
 }: {
   id: string
   value: string
   title: string
+  /** Shown above the title, for cards that stand for a firm. */
+  logo?: ReactNode
   className?: string
   children: ReactNode
 }) {
@@ -182,6 +234,7 @@ function ChoiceCard({
         className,
       )}
     >
+      {logo && <span className="flex">{logo}</span>}
       <span className="flex w-full items-center justify-between gap-4">
         <span id={`${id}-title`} className="font-expanded text-lg font-bold">
           {title}
@@ -200,10 +253,28 @@ function ChoiceCard({
   )
 }
 
+function Bullets({ items }: { items: ReactNode[] }) {
+  return (
+    <span className="grid gap-1.5 text-sm">
+      {items.map((item, i) => (
+        <span key={i} className="flex gap-2.5">
+          <span
+            aria-hidden="true"
+            className="mt-[0.45em] size-1.5 shrink-0 rounded-full bg-primary"
+          />
+          {/* One span so bold phrases wrap inline with their line. */}
+          <span>{item}</span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
 export function Walkthrough({
   initial,
-  rules,
   onFinish,
+  onFirmChange,
+  onAccountChange,
   onCancel,
 }: WalkthroughProps) {
   const [draft, setDraft] = useState<SetupDraft>(initial)
@@ -216,12 +287,13 @@ export function Walkthrough({
   const steps = stepsFor(draft)
   const step = steps[Math.min(index, steps.length - 1)]
   const isLast = index >= steps.length - 1
-  const copy = stepCopy(step, draft.payoutTaken)
+  const copy = stepCopy(step, draft)
 
   const sortedDays = useMemo(() => sortByDate(draft.days), [draft.days])
   const daySummary = useMemo(() => summarize(sortedDays), [sortedDays])
 
-  // Each strategy's plan for the numbers entered so far.
+  // Each strategy's plan for the numbers entered so far, on the account's
+  // own rules.
   const preview = useMemo(() => {
     if (step !== 'strategy' || !draft.approach) return null
     const inputs = deriveInputs(
@@ -231,20 +303,26 @@ export function Walkthrough({
         balance: draft.balance,
         largestProfitDay: draft.largestProfitDay,
         netProfit: draft.netProfit,
+        tradingDays: draft.tradingDays,
       },
       daySummary,
-      rules,
+      accountFor(
+        accountTemplate(draft.templateId),
+        draft.era,
+        parseAmount(draft.payoutsSoFar),
+        parseAmount(draft.payoutBuffer),
+      ),
     )
     if (inputs.consistencyRequirement <= 0) return null
     const results = calculate(inputs)
     return {
-      targetMet: results.targetMet,
+      ready: results.payoutReady,
       fastest: fastestDays(inputs, results),
       conservative: planFor(inputs, results, 'conservative'),
       aggressive: planFor(inputs, results, 'aggressive'),
       curated: resolvePlan(inputs, results, 'curated', draft.curated),
     }
-  }, [step, draft, daySummary, rules])
+  }, [step, draft, daySummary])
 
   // Move focus to the new screen's input (or its question) as it appears.
   useEffect(() => {
@@ -258,12 +336,62 @@ export function Walkthrough({
     setError(null)
   }
 
+  /**
+   * A firm brings its theme straight away, and as much of the account as it
+   * settles on its own: a firm with one type picks that type, and a type with
+   * one size picks that size.
+   */
+  function chooseFirm(firmId: string) {
+    const types = programsFor(firmId)
+    const programId = types.length === 1 ? types[0].id : ''
+    const templateId = onlySize(programId)
+    update({ firmId, programId, templateId, ...bufferFor(templateId) })
+    onFirmChange?.(firmId)
+    onAccountChange?.(templateId)
+  }
+
+  function chooseProgram(programId: string) {
+    const templateId = onlySize(programId)
+    update({ programId, templateId, ...bufferFor(templateId) })
+    onAccountChange?.(templateId)
+  }
+
+  function chooseSize(templateId: string) {
+    update({ templateId, ...bufferFor(templateId) })
+    onAccountChange?.(templateId)
+  }
+
+  /** Each account starts on its own buffer, which scales with its drawdown. */
+  function bufferFor(templateId: string): Partial<SetupDraft> {
+    if (!templateId) return {}
+    return { payoutBuffer: String(defaultBuffer(accountTemplate(templateId))) }
+  }
+
+  /** The one size a type comes in, or nothing to choose from yet. */
+  function onlySize(programId: string): string {
+    const sizes = programId ? sizesFor(programId) : []
+    return sizes.length === 1 ? sizes[0].id : ''
+  }
+
   function updateDays(change: (days: DayEntry[]) => DayEntry[]) {
     setDraft((d) => ({ ...d, days: change(d.days) }))
   }
 
   function problem(): string | null {
     switch (step) {
+      case 'firm':
+        return draft.firmId ? null : 'Choose a prop firm to continue.'
+      case 'program':
+        return draft.programId ? null : 'Choose an account type to continue.'
+      case 'size':
+        return draft.templateId ? null : 'Choose an account size to continue.'
+      case 'payouts':
+        if (!isAmount(draft.payoutsSoFar) || Number(draft.payoutsSoFar) < 0) {
+          return 'Enter how many payouts you have taken, or 0.'
+        }
+        return isAmount(draft.payoutBuffer) && Number(draft.payoutBuffer) >= 0
+          ? null
+          : 'Enter the drawdown room to keep as a dollar amount.'
       case 'approach':
         return draft.approach ? null : 'Choose an approach to continue.'
       case 'payout':
@@ -280,13 +408,17 @@ export function Walkthrough({
         return isAmount(draft.netProfit)
           ? null
           : 'Enter a dollar amount. It can be negative.'
+      case 'tradingDays':
+        return isAmount(draft.tradingDays) && Number(draft.tradingDays) >= 0
+          ? null
+          : 'Enter how many days you’ve traded, or 0.'
       case 'days':
         return null
       case 'strategy': {
         if (!draft.strategy) {
           return 'Choose conservative, aggressive, or curated to continue.'
         }
-        if (draft.strategy !== 'curated' || !preview || preview.targetMet) {
+        if (draft.strategy !== 'curated' || !preview || preview.ready) {
           return null
         }
         if (!toCuratedChoice(draft.curated)) {
@@ -324,10 +456,130 @@ export function Walkthrough({
     setIndex((i) => Math.max(0, i - 1))
   }
 
-  const isField = step === 'balance' || step === 'largest' || step === 'cumulative'
+  const isField =
+    step === 'balance' ||
+    step === 'largest' ||
+    step === 'cumulative' ||
+    step === 'tradingDays'
 
   let body: ReactNode
   switch (step) {
+    case 'firm':
+      body = (
+        <RadioGroup
+          value={draft.firmId}
+          onValueChange={chooseFirm}
+          aria-label="Prop firm"
+          className="grid gap-4 sm:grid-cols-2"
+        >
+          {FIRMS.map((f) => {
+            const types = programsFor(f.id)
+            const accounts = accountsFor(f.id)
+            return (
+              <ChoiceCard
+                key={f.id}
+                id={`firm-${f.id}`}
+                value={f.id}
+                title={f.name}
+                logo={<FirmLogo firmId={f.id} size="md" />}
+              >
+                <Bullets
+                  items={[
+                    `${types.map((p) => p.name).join(', ')} ${types.length === 1 ? 'accounts' : 'account types'}`,
+                    accounts.length === 1
+                      ? `One size: ${accounts[0].name}`
+                      : `${accounts.length} sizes, ${accounts[0].name} to ${accounts[accounts.length - 1].name}`,
+                    `${formatPercent(accounts[0].consistency)} consistency rule`,
+                  ]}
+                />
+              </ChoiceCard>
+            )
+          })}
+        </RadioGroup>
+      )
+      break
+    case 'program':
+      body = (
+        <RadioGroup
+          value={draft.programId}
+          onValueChange={chooseProgram}
+          aria-label="Account type"
+          className="grid gap-4 sm:grid-cols-2"
+        >
+          {programsFor(draft.firmId).map((p) => {
+            const sizes = sizesFor(p.id)
+            const days = sizes[0].minTradingDays
+            const graduated = sizes.some((t) => t.payout.caps.length > 1)
+            return (
+              <ChoiceCard
+                key={p.id}
+                id={`program-${p.id}`}
+                value={p.id}
+                title={p.name}
+              >
+                <Bullets
+                  items={[
+                    sizes.length === 1
+                      ? `One size: ${sizes[0].name}`
+                      : `${sizes.length} sizes: ${sizes.map((s) => s.name).join(', ')}`,
+                    `${formatPercent(sizes[0].consistency)} consistency rule`,
+                    `${days} trading ${days === 1 ? 'day' : 'days'} minimum`,
+                    graduated
+                      ? 'Payouts capped by how many you have taken'
+                      : `${formatRule(sizes[0].payout.caps[0])} max payout per request`,
+                  ]}
+                />
+              </ChoiceCard>
+            )
+          })}
+        </RadioGroup>
+      )
+      break
+    case 'size':
+      body = (
+        <RadioGroup
+          value={draft.templateId}
+          onValueChange={chooseSize}
+          aria-label="Account size"
+          className="grid gap-4 sm:grid-cols-2"
+        >
+          {sizesFor(draft.programId).map((template) => (
+            <ChoiceCard
+              key={template.id}
+              id={`size-${template.id}`}
+              value={template.id}
+              title={template.name}
+            >
+              <Bullets
+                items={[
+                  `Balance starts at ${formatRule(template.startingBalance)}`,
+                  // The first payout's terms; the next screen asks which one
+                  // the trader is actually on.
+                  `${formatRule(payoutThreshold(template.payout, 0))} balance for a ${formatRule(payoutCap(template.payout, 0))} first payout`,
+                  `${formatRule(template.payout.minimumPayout)} minimum payout`,
+                ]}
+              />
+            </ChoiceCard>
+          ))}
+        </RadioGroup>
+      )
+      break
+    case 'payouts':
+      body = (
+        <ScheduleControls
+          template={accountTemplate(draft.templateId)}
+          era={draft.era}
+          payoutsSoFar={draft.payoutsSoFar}
+          payoutBuffer={draft.payoutBuffer}
+          onEraChange={(era) => update({ era })}
+          onPayoutsChange={(payoutsSoFar) => update({ payoutsSoFar })}
+          onBufferChange={(payoutBuffer) => update({ payoutBuffer })}
+          idPrefix="walkthrough-schedule"
+          invalid={error !== null}
+          className="max-w-xl rounded-lg border bg-card p-5"
+        />
+      )
+      break
     case 'approach':
       body = (
         <>
@@ -346,18 +598,7 @@ export function Walkthrough({
               >
                 <span className="text-sm text-muted-foreground">{a.summary}</span>
                 <span className="text-sm font-medium">You’ll provide</span>
-                <span className="grid gap-1.5 text-sm">
-                  {a.provides.map((item, i) => (
-                    <span key={i} className="flex gap-2.5">
-                      <span
-                        aria-hidden="true"
-                        className="mt-[0.45em] size-1.5 shrink-0 rounded-full bg-primary"
-                      />
-                      {/* One span so bold phrases wrap inline with their line. */}
-                      <span>{item}</span>
-                    </span>
-                  ))}
-                </span>
+                <Bullets items={a.provides} />
               </ChoiceCard>
             ))}
           </RadioGroup>
@@ -441,6 +682,22 @@ export function Walkthrough({
         />
       )
       break
+    case 'tradingDays':
+      body = (
+        <MoneyField
+          id="walkthrough-trading-days"
+          label="Trading days so far"
+          hideLabel
+          unit="days"
+          size="lg"
+          value={draft.tradingDays}
+          onChange={(v) => update({ tradingDays: v })}
+          error={error}
+          inputRef={fieldRef}
+          onEnter={advance}
+        />
+      )
+      break
     case 'days':
       body = (
         <Ledger
@@ -491,8 +748,8 @@ export function Walkthrough({
                     <span className="border-t pt-3 text-sm">
                       Your plan:{' '}
                       <span className="font-figure font-semibold">
-                        {preview.targetMet
-                          ? 'target already reached'
+                        {preview.ready
+                          ? 'payout already available'
                           : plan
                             ? planText(plan)
                             : 'pick days or a cap'}
@@ -503,7 +760,7 @@ export function Walkthrough({
               )
             })}
           </RadioGroup>
-          {draft.strategy === 'curated' && preview && !preview.targetMet && (
+          {draft.strategy === 'curated' && preview && !preview.ready && (
             <CuratedControls
               idPrefix="walkthrough-curated"
               value={draft.curated}
@@ -516,7 +773,7 @@ export function Walkthrough({
             />
           )}
           {preview &&
-            !preview.targetMet &&
+            !preview.ready &&
             preview.conservative.days === preview.aggressive.days && (
               <p className="mt-4 text-sm text-muted-foreground">
                 For your numbers right now, conservative and aggressive come
@@ -552,6 +809,20 @@ export function Walkthrough({
         key={step}
         className="animate-in pt-10 duration-300 fade-in slide-in-from-bottom-2 sm:pt-16"
       >
+        {/* Once a firm is chosen, every screen says whose account this is,
+            naming as much of it as has been settled. */}
+        {step !== 'firm' && draft.firmId && (
+          <p className="mb-5 flex items-center gap-2.5">
+            <FirmLogo firmId={draft.firmId} />
+            {step !== 'program' && (
+              <span className="text-sm text-muted-foreground">
+                {draft.templateId
+                  ? accountLabel(accountTemplate(draft.templateId))
+                  : program(draft.programId).name}
+              </span>
+            )}
+          </p>
+        )}
         <h1
           ref={headingRef}
           tabIndex={-1}

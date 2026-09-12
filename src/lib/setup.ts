@@ -1,4 +1,12 @@
 import {
+  accountTemplate,
+  DEFAULT_TEMPLATE,
+  hasSchedule,
+  sizesFor,
+  type AccountKey,
+  type Era,
+} from '@/lib/accounts'
+import {
   curatedPlan,
   planFor,
   type CalcInputs,
@@ -26,6 +34,14 @@ export interface CuratedDraft {
 export const CURATED_DEFAULT: CuratedDraft = { mode: 'days', days: null, cap: '' }
 
 export interface Setup {
+  /** The account template the rules came from. */
+  templateId: string
+  /** Which payout schedule the account is on; missing on older saves. */
+  era?: Era
+  /** Payouts already taken, which sets the next payout's cap. */
+  payoutsSoFar?: number
+  /** Payout buffer after a payout, where the floor breaches. */
+  payoutBuffer?: number
   approach: Approach
   /** Day-by-day only: once a payout is taken, balance is entered, not derived. */
   payoutTaken: boolean
@@ -38,17 +54,24 @@ export interface Setup {
 export interface Snapshot {
   largestProfitDay: string
   netProfit: string
-}
-
-/** Account rules, as typed. */
-export interface Rules {
-  payoutBuffer: string
-  payoutCap: string
-  consistency: string
+  /** Trading days already logged in this payout cycle. */
+  tradingDays: string
 }
 
 /** What the walkthrough collects before anything is saved. */
 export interface SetupDraft {
+  /** The prop firm, picked before the account. Empty until chosen. */
+  firmId: string
+  /** The account type. Auto-filled when its firm offers only one. */
+  programId: string
+  /** The account size. Auto-filled when its type comes in only one. */
+  templateId: string
+  /** Which payout schedule the account is on. */
+  era: Era
+  /** Payouts already taken, as typed. */
+  payoutsSoFar: string
+  /** Payout buffer after a payout, as typed. */
+  payoutBuffer: string
   approach: Approach | null
   payoutTaken: boolean | null
   strategy: Strategy | null
@@ -56,36 +79,70 @@ export interface SetupDraft {
   balance: string
   largestProfitDay: string
   netProfit: string
+  tradingDays: string
   days: DayEntry[]
 }
 
 export type StepId =
+  | 'firm'
+  | 'program'
+  | 'size'
+  | 'payouts'
   | 'approach'
   | 'payout'
   | 'balance'
   | 'largest'
   | 'cumulative'
+  | 'tradingDays'
   | 'days'
   | 'strategy'
 
-/** A funded account's balance starts at $0, which is what the formula expects. */
-export const BALANCE_HINT = 'Your funded account balance, which starts at $0.'
+/** The balance hint, which depends on where the firm starts the account. */
+export function balanceHint(templateId: string): string {
+  const template = accountTemplate(templateId)
+  return template.startingBalance > 0
+    ? `Your account balance today. It starts at $${template.startingBalance.toLocaleString('en-US')}.`
+    : 'Your funded account balance, which starts at $0.'
+}
 
 export function stepsFor(
-  draft: Pick<SetupDraft, 'approach' | 'payoutTaken'>,
+  draft: Pick<SetupDraft, 'approach' | 'payoutTaken' | 'programId' | 'templateId'>,
 ): StepId[] {
+  // A type that comes in one size has nothing to ask, so its screen is
+  // dropped and the size is filled in with the type.
+  const account: StepId[] =
+    draft.programId && sizesFor(draft.programId).length < 2
+      ? ['firm', 'program']
+      : ['firm', 'program', 'size']
+
+  // Only accounts whose payouts are graduated, or that changed terms on a
+  // date, have a schedule to ask about. Any firm added later that does gets
+  // this screen for free.
+  if (draft.templateId && hasSchedule(accountTemplate(draft.templateId))) {
+    account.push('payouts')
+  }
+
   if (draft.approach === 'dayByDay') {
     return draft.payoutTaken
-      ? ['approach', 'payout', 'balance', 'days', 'strategy']
-      : ['approach', 'payout', 'days', 'strategy']
+      ? [...account, 'approach', 'payout', 'balance', 'days', 'strategy']
+      : [...account, 'approach', 'payout', 'days', 'strategy']
   }
-  return ['approach', 'balance', 'largest', 'cumulative', 'strategy']
+  return [
+    ...account,
+    'approach',
+    'balance',
+    'largest',
+    'cumulative',
+    'tradingDays',
+    'strategy',
+  ]
 }
 
 /**
  * The calculator's inputs for either approach. Point-in-time uses the numbers
- * as typed; day-by-day derives largest day and net profit from the ledger,
- * and before any payout, the balance too.
+ * as typed; day-by-day derives largest day, net profit, and the trading days
+ * from the ledger, and before any payout the balance too, by adding the logged
+ * days to where the account started.
  */
 export function deriveInputs(
   source: {
@@ -94,24 +151,32 @@ export function deriveInputs(
     balance: string
     largestProfitDay: string
     netProfit: string
+    tradingDays: string
   },
   summary: LedgerSummary,
-  rules: Rules,
+  account: Record<AccountKey, string>,
 ): CalcInputs {
   const pointInTime = source.approach === 'pointInTime'
   const balanceEntered = pointInTime || source.payoutTaken
+  const startingBalance = parseAmount(account.startingBalance)
+
   return {
-    // Before any payout, the balance since funding is everything logged.
-    balance: balanceEntered ? parseAmount(source.balance) : summary.netProfit,
-    payoutBuffer: parseAmount(rules.payoutBuffer),
-    payoutCap: parseAmount(rules.payoutCap),
+    balance: balanceEntered
+      ? parseAmount(source.balance)
+      : startingBalance + summary.netProfit,
+    payoutThreshold: parseAmount(account.payoutThreshold),
+    minimumPayout: parseAmount(account.minimumPayout),
     largestProfitDay: pointInTime
       ? parseAmount(source.largestProfitDay)
       : summary.largestProfitDay,
     currentNetProfit: pointInTime
       ? parseAmount(source.netProfit)
       : summary.netProfit,
-    consistencyRequirement: parseAmount(rules.consistency) / 100,
+    consistencyRequirement: parseAmount(account.consistency) / 100,
+    minTradingDays: Math.max(0, Math.round(parseAmount(account.minTradingDays))),
+    tradingDaysSoFar: pointInTime
+      ? Math.max(0, Math.round(parseAmount(source.tradingDays)))
+      : summary.tradingDays,
   }
 }
 
@@ -141,15 +206,20 @@ export function resolvePlan(
 
 /**
  * Storage written before the walkthrough existed has logged days but no
- * setup. Treat it as day-by-day with an entered balance, which is how that
- * version worked, so returning users skip the walkthrough.
+ * setup. Treat it as day-by-day on the workbook's own account, which is how
+ * that version worked, so returning users skip the walkthrough.
  */
 export function legacySetup(): Setup | null {
   try {
     const raw = window.localStorage.getItem('mpc.days')
     const days: unknown = raw ? JSON.parse(raw) : null
     return Array.isArray(days) && days.length > 0
-      ? { approach: 'dayByDay', payoutTaken: true, strategy: 'conservative' }
+      ? {
+          templateId: DEFAULT_TEMPLATE,
+          approach: 'dayByDay',
+          payoutTaken: true,
+          strategy: 'conservative',
+        }
       : null
   } catch {
     return null

@@ -21,7 +21,7 @@ export function SnapshotPanel({ snapshot, onSnapshotChange }: SnapshotPanelProps
         updates as you type.
       </p>
 
-      <div className="mt-5 grid gap-5 sm:grid-cols-2">
+      <div className="mt-5 grid gap-5 sm:grid-cols-3">
         <MoneyField
           id="snapshot-largest"
           label="Largest profit day"
@@ -37,6 +37,15 @@ export function SnapshotPanel({ snapshot, onSnapshotChange }: SnapshotPanelProps
           value={snapshot.netProfit}
           invalid={looksWrong(snapshot.netProfit)}
           onChange={(v) => onSnapshotChange({ netProfit: v })}
+        />
+        <MoneyField
+          id="snapshot-days"
+          label="Trading days so far"
+          unit="days"
+          hint="Days you have traded since the last payout."
+          value={snapshot.tradingDays}
+          invalid={looksWrong(snapshot.tradingDays)}
+          onChange={(v) => onSnapshotChange({ tradingDays: v })}
         />
       </div>
     </section>

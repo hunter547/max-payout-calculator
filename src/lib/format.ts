@@ -38,6 +38,16 @@ export function formatCurrency(value: number): string {
   return currency.format(settled)
 }
 
+/**
+ * "$25,000" / "$4,758.34" — cents only when there are any. For the round
+ * figures a firm sets its rules in, where trailing zeros are just noise.
+ */
+export function formatRule(value: number): string {
+  if (!Number.isFinite(value)) return '—'
+  const settled = Math.abs(value) < 0.005 ? 0 : value
+  return axisCurrency.format(settled)
+}
+
 /** "+$359.00" / "−$212.40" — P&L always shows its direction. */
 export function formatSignedCurrency(value: number): string {
   if (!Number.isFinite(value)) return '—'

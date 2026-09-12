@@ -3,6 +3,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
+/** A dollar prefix, or a percent, days or payouts suffix. */
+export type FieldUnit = '$' | '%' | 'days' | 'payouts'
+
 interface MoneyFieldProps {
   id: string
   label: ReactNode
@@ -11,7 +14,7 @@ interface MoneyFieldProps {
   hint?: ReactNode
   error?: string | null
   invalid?: boolean
-  unit?: '$' | '%'
+  unit?: FieldUnit
   size?: 'default' | 'lg'
   /** Keep the label for screen readers when a heading already asks the question. */
   hideLabel?: boolean
@@ -39,26 +42,21 @@ export function MoneyField({
   const errorId = error ? `${id}-error` : undefined
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined
   const lg = size === 'lg'
+  const prefix = unit === '$'
 
   return (
     <div className="grid content-start gap-1.5">
       <Label htmlFor={id} className={cn(hideLabel && 'sr-only')}>
         {label}
       </Label>
-      {/* Dim the whole control from here, so the $ / % fades with the value. */}
+      {/* Dim the whole control from here, so the unit fades with the value. */}
       <div className={cn('relative', disabled && 'cursor-not-allowed opacity-50')}>
         <span
           aria-hidden="true"
           className={cn(
             'pointer-events-none absolute top-1/2 -translate-y-1/2 text-muted-foreground',
             lg ? 'text-2xl' : 'text-sm',
-            unit === '$'
-              ? lg
-                ? 'left-4'
-                : 'left-3'
-              : lg
-                ? 'right-4'
-                : 'right-3',
+            prefix ? (lg ? 'left-4' : 'left-3') : lg ? 'right-4' : 'right-3',
           )}
         >
           {unit}
@@ -83,7 +81,10 @@ export function MoneyField({
             // The wrapper does the dimming; opacity here would double it.
             'font-figure disabled:bg-muted disabled:opacity-100',
             lg && 'h-16 text-3xl font-semibold md:text-3xl',
-            unit === '$' ? (lg ? 'pl-10' : 'pl-7') : lg ? 'pr-12' : 'pr-8',
+            prefix && (lg ? 'pl-10' : 'pl-7'),
+            unit === '%' && (lg ? 'pr-12' : 'pr-8'),
+            unit === 'days' && (lg ? 'pr-20' : 'pr-14'),
+            unit === 'payouts' && (lg ? 'pr-28' : 'pr-20'),
           )}
         />
       </div>

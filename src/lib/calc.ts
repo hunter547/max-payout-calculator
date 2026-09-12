@@ -1,31 +1,37 @@
 /**
- * Port of "MyFundedFutrures 50k Builder Max Payout Calculator.xlsx" (Sheet1).
+ * The payout maths. Ported cell-for-cell from
+ * "MyFundedFutrures 50k Builder Max Payout Calculator.xlsx" (Sheet1), then
+ * generalised so other firms' account rules fit the same shape:
  *
- * Spreadsheet cells -> fields:
- *   A3 Balance                            -> balance
- *   B3 Payout Buffer                      -> payoutBuffer
- *   C3 Payout Cap                         -> payoutCap
- *   D3 Largest Profit Day                 -> largestProfitDay
- *   E3 Minimum Target Net Profit          =MAX(500, (B3+C3)-A3)
- *   F3 Current Net Profit                 -> currentNetProfit
- *   G3 Consistency Requirement            -> consistencyRequirement (fraction, 0.5 = 50%)
- *   H3 Minimum Net Profit Required        =MAX(E3, ABS(D3)/G3)
- *   I3 Remaining Profit Needed            =H3-F3
- *   J3 Minimum Number of Trading Days Left=CEILING.MATH(I3/(H3*G3))
- *   K3 Daily Profit Needed (equal split)  =I3/J3
+ *   E3 Minimum target net profit   =MAX(minimum payout, payout threshold - balance)
+ *   H3 Minimum net profit required =MAX(E3, ABS(largest day) / consistency)
+ *   I3 Remaining profit needed     =H3 - net profit
+ *   J3 Minimum trading days left   =CEILING.MATH(I3 / (H3 * consistency))
+ *   K3 Daily profit needed         =I3 / J3
+ *
+ * The workbook's payout buffer + payout cap (2100 + 2000) is the 50k Builder's
+ * payout threshold of 4100, and its 500 literal is that firm's minimum payout,
+ * so the sheet's own numbers come out unchanged.
+ *
+ * On top of the sheet, a firm can also require a number of trading days since
+ * the last payout before it will pay at all.
  */
 
-/** The `500` literal inside E3's MAX(). The 50k Builder minimum payout. */
-export const MINIMUM_PAYOUT_FLOOR = 500
-
 export interface CalcInputs {
+  /** Balance in the account's own terms; see the template's startingBalance. */
   balance: number
-  payoutBuffer: number
-  payoutCap: number
+  /** Balance needed before the biggest payout can be requested. */
+  payoutThreshold: number
+  /** Profit a payout needs regardless of the threshold; 0 when there is none. */
+  minimumPayout: number
   largestProfitDay: number
   currentNetProfit: number
   /** Fraction, not percent: 0.5 means 50%. */
   consistencyRequirement: number
+  /** Trading days the firm needs since the last payout. */
+  minTradingDays: number
+  /** Trading days already behind you in this payout cycle. */
+  tradingDaysSoFar: number
 }
 
 export interface CalcResults {
@@ -35,15 +41,19 @@ export interface CalcResults {
   minimumNetProfitRequired: number
   /** I3 */
   remainingProfitNeeded: number
-  /** J3 */
+  /** J3: the days the profit alone needs, before any firm minimum. */
   minimumTradingDaysLeft: number
   /** K3 */
   dailyProfitNeeded: number
   /** H3 * G3 — the largest any single day may be without breaking consistency. */
   maxAllowedSingleDay: number
-  /** True once current net profit already covers the requirement (I3 <= 0). */
+  /** True once net profit covers the requirement (I3 <= 0). */
   targetMet: boolean
-  /** Does the existing largest profit day already satisfy the consistency rule? */
+  /** Trading days still needed purely to qualify for a payout. */
+  eligibilityDaysLeft: number
+  /** Both the profit and the trading days are covered. */
+  payoutReady: boolean
+  /** Does the existing largest profit day satisfy the consistency rule? */
   largestDayWithinConsistency: boolean
   /** Would the equal-split daily target itself satisfy the consistency rule? */
   dailyTargetWithinConsistency: boolean
@@ -62,17 +72,19 @@ function ceilingMath(value: number): number {
 export function calculate(inputs: CalcInputs): CalcResults {
   const {
     balance,
-    payoutBuffer,
-    payoutCap,
+    payoutThreshold,
+    minimumPayout,
     largestProfitDay,
     currentNetProfit,
     consistencyRequirement: consistency,
+    minTradingDays,
+    tradingDaysSoFar,
   } = inputs
 
-  // E3 =MAX(500, (B3+C3)-A3)
+  // E3 =MAX(minimum payout, threshold - balance)
   const minimumTargetNetProfit = Math.max(
-    MINIMUM_PAYOUT_FLOOR,
-    payoutBuffer + payoutCap - balance,
+    minimumPayout,
+    payoutThreshold - balance,
   )
 
   // H3 =MAX(E3, ABS(D3)/G3).  Excel yields #DIV/0! at G3=0; we fall back to the
@@ -103,6 +115,11 @@ export function calculate(inputs: CalcInputs): CalcResults {
       ? remainingProfitNeeded / minimumTradingDaysLeft
       : 0
 
+  const eligibilityDaysLeft = Math.max(
+    0,
+    Math.ceil(minTradingDays - tradingDaysSoFar),
+  )
+
   return {
     minimumTargetNetProfit,
     minimumNetProfitRequired,
@@ -111,6 +128,8 @@ export function calculate(inputs: CalcInputs): CalcResults {
     dailyProfitNeeded,
     maxAllowedSingleDay,
     targetMet,
+    eligibilityDaysLeft,
+    payoutReady: targetMet && eligibilityDaysLeft === 0,
     largestDayWithinConsistency:
       Math.abs(largestProfitDay) <= maxAllowedSingleDay + 1e-9,
     dailyTargetWithinConsistency:
@@ -129,6 +148,9 @@ export function calculate(inputs: CalcInputs): CalcResults {
  *
  * Curated: the trader picks the number of days, or a daily cap that replaces
  * the default and largest-day cap and sets the number of days.
+ *
+ * Every plan also covers the firm's remaining trading days, so it never
+ * promises a payout the account is not yet eligible for.
  */
 export type Strategy = 'conservative' | 'aggressive' | 'curated'
 
@@ -141,16 +163,18 @@ export const MAX_PLAN_DAYS = 252
 
 export interface Plan {
   strategy: Strategy
-  /** Trading days the plan takes; 0 once the target is met. */
+  /** Trading days the plan takes; 0 once the payout is ready. */
   days: number
-  /** Profit each planned day needs to make. */
+  /** Profit each planned day needs; 0 when only trading days are missing. */
   dailyProfit: number
   /** Net profit required once the planned days are counted. */
   requiredProfit: number
-  /** Most one day can make under the plan once it's done. */
+  /** Most one day can make under the plan once it is done. */
   dailyCap: number
   /** Planned days top the current largest day and lift the target. */
   raisesTarget: boolean
+  /** The plan runs longer than the profit needs, to reach the firm minimum. */
+  heldByEligibility: boolean
   /** Curated by cap: dailyCap is the trader's own cap. */
   customCap?: boolean
   /** Curated by days: the pick was below the fewest possible and was raised. */
@@ -194,11 +218,12 @@ function dailyFor(
 }
 
 /**
- * Fewest equal days that reach payout. Equal days are optimal: for a given
- * total they keep the largest day as small as possible. The conservative plan
- * always satisfies the same rules, so this never needs more than J3 days.
+ * Fewest equal days that reach the profit target. Equal days are optimal: for
+ * a given total they keep the largest day as small as possible. The
+ * conservative plan always satisfies the same rules, so this never needs more
+ * than J3 days.
  */
-function fewestDays(
+function fewestProfitDays(
   inputs: CalcInputs,
   results: CalcResults,
 ): { days: number; dailyProfit: number } {
@@ -212,9 +237,12 @@ function fewestDays(
   }
 }
 
-/** The fewest trading days any plan can reach payout in: the aggressive count. */
+/** The fewest trading days any plan can take: the aggressive count. */
 export function fastestDays(inputs: CalcInputs, results: CalcResults): number {
-  return fewestDays(inputs, results).days
+  return Math.max(
+    fewestProfitDays(inputs, results).days,
+    results.eligibilityDaysLeft,
+  )
 }
 
 /** A plan of `days` equal days, with the target those days imply. */
@@ -223,11 +251,18 @@ function planOf(
   results: CalcResults,
   strategy: Strategy,
   days: number,
-  dailyProfit: number,
 ): Plan {
   const G = inputs.consistencyRequirement
+  // With the profit target met, the days left are the firm's, not the maths'.
+  const dailyProfit = results.targetMet
+    ? 0
+    : (dailyFor(inputs, results, days) ?? results.dailyProfitNeeded)
   const largest = Math.max(Math.abs(inputs.largestProfitDay), dailyProfit)
-  const requiredProfit = Math.max(results.minimumTargetNetProfit, largest / G)
+  const requiredProfit =
+    G > 0
+      ? Math.max(results.minimumTargetNetProfit, largest / G)
+      : results.minimumNetProfitRequired
+
   return {
     strategy,
     days,
@@ -235,6 +270,19 @@ function planOf(
     requiredProfit,
     dailyCap: requiredProfit * G,
     raisesTarget: requiredProfit > results.minimumNetProfitRequired + 1e-9,
+    heldByEligibility: days > results.minimumTradingDaysLeft,
+  }
+}
+
+function idlePlan(results: CalcResults, strategy: Strategy): Plan {
+  return {
+    strategy,
+    days: 0,
+    dailyProfit: 0,
+    requiredProfit: results.minimumNetProfitRequired,
+    dailyCap: results.maxAllowedSingleDay,
+    raisesTarget: false,
+    heldByEligibility: false,
   }
 }
 
@@ -243,20 +291,14 @@ export function planFor(
   results: CalcResults,
   strategy: 'conservative' | 'aggressive',
 ): Plan {
-  const conservative: Plan = {
-    strategy,
-    days: results.minimumTradingDaysLeft,
-    dailyProfit: results.dailyProfitNeeded,
-    requiredProfit: results.minimumNetProfitRequired,
-    dailyCap: results.maxAllowedSingleDay,
-    raisesTarget: false,
-  }
-  if (strategy === 'conservative' || conservative.days === 0) {
-    return conservative
-  }
-
-  const { days, dailyProfit } = fewestDays(inputs, results)
-  return planOf(inputs, results, strategy, days, dailyProfit)
+  const profitDays =
+    strategy === 'conservative'
+      ? results.minimumTradingDaysLeft
+      : fewestProfitDays(inputs, results).days
+  const days = Math.max(profitDays, results.eligibilityDaysLeft)
+  return days === 0
+    ? idlePlan(results, strategy)
+    : planOf(inputs, results, strategy, days)
 }
 
 /**
@@ -272,19 +314,16 @@ export function curatedPlan(
   results: CalcResults,
   choice: CuratedChoice,
 ): Plan | null {
-  if (results.minimumTradingDaysLeft === 0) {
-    return { ...planFor(inputs, results, 'conservative'), strategy: 'curated' }
-  }
-
   const fastest = fastestDays(inputs, results)
+  if (fastest === 0) return idlePlan(results, 'curated')
 
-  if (choice.mode === 'days') {
-    const days = Math.max(Math.round(choice.days), fastest)
-    const dailyProfit = dailyFor(inputs, results, days)
-    if (dailyProfit === null) return null
+  if (results.targetMet || choice.mode === 'days') {
+    // Nothing left to earn, or a day count was named: honour the floor.
+    const wanted = choice.mode === 'days' ? Math.round(choice.days) : fastest
+    const days = Math.max(wanted, fastest)
     return {
-      ...planOf(inputs, results, 'curated', days, dailyProfit),
-      adjusted: days !== choice.days,
+      ...planOf(inputs, results, 'curated', days),
+      adjusted: choice.mode === 'days' && days !== choice.days,
     }
   }
 
@@ -298,7 +337,7 @@ export function curatedPlan(
     const dailyProfit = dailyFor(inputs, results, n)
     if (dailyProfit !== null && dailyProfit <= choice.cap * (1 + 1e-9)) {
       return {
-        ...planOf(inputs, results, 'curated', n, dailyProfit),
+        ...planOf(inputs, results, 'curated', n),
         dailyCap: choice.cap,
         customCap: true,
       }

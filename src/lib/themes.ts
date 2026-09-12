@@ -4,9 +4,6 @@
  * follow the trader's prop firm; add a firm by adding both.
  */
 
-import mffuLogo from '@/assets/brands/mffu.svg'
-import tradeifyLogo from '@/assets/brands/tradeify.svg'
-
 export type Scheme = 'light' | 'dark'
 
 export interface BrandTheme {
@@ -19,11 +16,6 @@ export interface BrandTheme {
   schemes: readonly Scheme[]
   /** Page, primary, accent: shown beside the name in the theme picker. */
   swatches: readonly [string, string, string]
-  /**
-   * The firm's logo, shown in the header in place of the subtitle. Firm
-   * themes are dark only, so this is the white-on-dark version of the art.
-   */
-  logo?: { src: string; alt: string }
 }
 
 export const BRAND_THEMES: readonly BrandTheme[] = [
@@ -38,14 +30,12 @@ export const BRAND_THEMES: readonly BrandTheme[] = [
     name: 'MyFundedFutures',
     schemes: ['dark'],
     swatches: ['#02040e', '#3a82f7', '#d8ae5e'],
-    logo: { src: mffuLogo, alt: 'MyFundedFutures logo' },
   },
   {
     id: 'tradeify',
     name: 'Tradeify',
     schemes: ['dark'],
     swatches: ['#08080a', '#00ff51', '#efa22b'],
-    logo: { src: tradeifyLogo, alt: 'Tradeify logo' },
   },
 ]
 

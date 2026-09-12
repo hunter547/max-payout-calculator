@@ -1,38 +1,39 @@
-import { MINIMUM_PAYOUT_FLOOR, type CalcResults, type Plan } from '@/lib/calc'
+import type { CalcInputs, CalcResults, Plan } from '@/lib/calc'
 import {
   formatCurrency,
   formatPercent,
+  formatRule,
   formatSignedCurrency,
 } from '@/lib/format'
 
 interface TargetBreakdownProps {
+  inputs: CalcInputs
   results: CalcResults
   plan: Plan
-  largestProfitDay: number
-  netProfit: number
-  /** Null in point-in-time mode, where days aren't logged. */
+  /** The payout being worked towards, for accounts with a schedule. */
+  payout: { number: number; cap: number; repeats: boolean } | null
+  /** Null in point-in-time mode, where days aren't logged one by one. */
   tradingDays: number | null
-  /** Fraction, 0.5 = 50%. */
-  consistency: number
   consistencyInvalid: boolean
 }
 
 export function TargetBreakdown({
+  inputs,
   results,
   plan,
-  largestProfitDay,
-  netProfit,
+  payout,
   tradingDays,
-  consistency,
   consistencyInvalid,
 }: TargetBreakdownProps) {
+  const consistency = inputs.consistencyRequirement
+  const netProfit = inputs.currentNetProfit
   const consistencyDriven =
     results.minimumNetProfitRequired > results.minimumTargetNetProfit
 
   const requiredNote = plan.raisesTarget
     ? `Planned days of ${formatCurrency(plan.dailyProfit)} can be at most ${formatPercent(consistency)} of net profit, which lifts the target from ${formatCurrency(results.minimumNetProfitRequired)}.`
     : consistencyDriven
-      ? `Your ${formatCurrency(Math.abs(largestProfitDay))} day can be at most ${formatPercent(consistency)} of net profit.`
+      ? `Your ${formatCurrency(Math.abs(inputs.largestProfitDay))} day can be at most ${formatPercent(consistency)} of net profit.`
       : 'Same as the minimum target.'
 
   const rows: { label: string; value: string; note?: string }[] = [
@@ -40,9 +41,9 @@ export function TargetBreakdown({
       label: 'Minimum target',
       value: formatCurrency(results.minimumTargetNetProfit),
       note:
-        results.minimumTargetNetProfit === MINIMUM_PAYOUT_FLOOR
-          ? `The ${formatCurrency(MINIMUM_PAYOUT_FLOOR)} minimum payout.`
-          : 'Payout buffer plus cap, less your balance.',
+        results.minimumTargetNetProfit === inputs.minimumPayout
+          ? `The ${formatCurrency(inputs.minimumPayout)} minimum payout.`
+          : `${formatCurrency(inputs.payoutThreshold)} needed for a max payout, less your balance.`,
     },
     {
       label: 'Profit required',
@@ -72,6 +73,27 @@ export function TargetBreakdown({
           : 'A bigger day raises the profit required.',
     },
   ]
+
+  if (payout) {
+    rows.push({
+      label: 'Max payout',
+      value: formatRule(payout.cap),
+      note: `The most payout ${payout.number} can withdraw${
+        payout.repeats ? ', and every one after it' : ''
+      }.`,
+    })
+  }
+
+  if (inputs.minTradingDays > 0) {
+    rows.push({
+      label: 'Trading days',
+      value: `${Math.min(inputs.tradingDaysSoFar, inputs.minTradingDays)} of ${inputs.minTradingDays}`,
+      note:
+        results.eligibilityDaysLeft > 0
+          ? `${results.eligibilityDaysLeft} more before this firm will pay out.`
+          : 'The firm’s minimum is covered.',
+    })
+  }
 
   return (
     <section aria-labelledby="breakdown-heading">

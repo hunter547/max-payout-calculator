@@ -2,6 +2,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { accountTemplate, firmOf, hasSchedule, sizesFor } from '@/lib/accounts'
 import { BRAND_THEMES } from '@/lib/themes'
 import App from './App'
 
@@ -18,11 +19,14 @@ class ResizeObserverStub {
 globalThis.ResizeObserver ??=
   ResizeObserverStub as unknown as typeof ResizeObserver
 
-const WORKBOOK_ACCOUNT = {
+/** The workbook's own account: MyFundedFutures 50k Builder. */
+const WORKBOOK_RULES = {
   balance: '4758.34',
-  payoutBuffer: '2100',
-  payoutCap: '2000',
+  startingBalance: '0',
+  payoutThreshold: '4100',
+  minimumPayout: '500',
   consistency: '50',
+  minTradingDays: '2',
 }
 
 let container: HTMLDivElement
@@ -54,16 +58,21 @@ function seed(values: Record<string, unknown>) {
   }
 }
 
-/** Skip the walkthrough: day-by-day, payout taken, the workbook's balance. */
+/** Skip the walkthrough: day-by-day, payout taken, the workbook's account. */
 function seedDashboard() {
   seed({
-    'mpc.setup': { approach: 'dayByDay', payoutTaken: true },
-    'mpc.account': WORKBOOK_ACCOUNT,
+    'mpc.setup': {
+      templateId: 'mffu-50k-builder',
+      approach: 'dayByDay',
+      payoutTaken: true,
+    },
+    'mpc.rules': WORKBOOK_RULES,
   })
 }
 
 const headline = () => container.querySelector('h1')?.textContent ?? ''
 const text = () => container.textContent ?? ''
+const header = () => container.querySelector('header')?.textContent ?? ''
 const ledgerRows = () => container.querySelectorAll('tbody tr')
 
 function type(input: HTMLInputElement, value: string) {
@@ -121,8 +130,30 @@ function choose(value: string) {
   act(() => radio.click())
 }
 
+/** Past the account screens, on the workbook's account by default. */
+function toApproach(templateId = 'mffu-50k-builder') {
+  const template = accountTemplate(templateId)
+  choose(firmOf(template).id)
+  press('Continue')
+  choose(template.programId)
+  press('Continue')
+  // A type with one size has no size screen; it came with the type.
+  if (sizesFor(template.programId).length > 1) {
+    choose(templateId)
+    press('Continue')
+  }
+  // Only accounts with a graduated or dated schedule are asked about it.
+  if (hasSchedule(template)) press('Continue')
+}
+
 /** Walk the point-in-time screens up to the strategy question. */
-function pointInTimeTo(balance: string, largest: string, cumulative: string) {
+function pointInTimeTo(
+  balance: string,
+  largest: string,
+  cumulative: string,
+  tradingDays = '3',
+) {
+  toApproach()
   choose('pointInTime')
   press('Continue')
   type(byLabel('Current balance'), balance)
@@ -131,11 +162,104 @@ function pointInTimeTo(balance: string, largest: string, cumulative: string) {
   press('Continue')
   type(byLabel('Cumulative profit'), cumulative)
   press('Continue')
+  type(byLabel('Trading days so far'), tradingDays)
+  press('Continue')
 }
 
 describe('walkthrough', () => {
-  it('opens with the approach question on a first visit', () => {
+  it('opens by asking which prop firm, in the default theme', () => {
     render()
+
+    expect(headline()).toBe('Which prop firm?')
+    expect(document.documentElement.dataset.brand).toBe('default')
+    expect(text()).toContain('MyFundedFutures')
+    expect(text()).toContain('Tradeify')
+    // Each card carries the firm's logo and what its accounts have in common.
+    const logos = Array.from(container.querySelectorAll('img')).map((img) =>
+      img.getAttribute('alt'),
+    )
+    expect(logos).toEqual(['MyFundedFutures logo', 'Tradeify logo'])
+    expect(text()).toContain('Builder accounts')
+    expect(text()).toContain('One size: 50k')
+    expect(text()).toContain('Growth accounts')
+    expect(text()).toContain('4 sizes, 25k to 150k')
+    expect(text()).toContain('35% consistency rule')
+  })
+
+  it('asks for a firm before moving on', () => {
+    render()
+    press('Continue')
+
+    expect(headline()).toBe('Which prop firm?')
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'Choose a prop firm to continue.',
+    )
+  })
+
+  it('asks for the account type, then its size', () => {
+    render()
+    choose('tradeify')
+    press('Continue')
+
+    // The type carries the rules that hold across its sizes.
+    expect(headline()).toBe('Which account type?')
+    expect(text()).toContain('4 sizes: 25k, 50k, 100k, 150k')
+    expect(text()).toContain('35% consistency rule')
+    expect(text()).toContain('5 trading days minimum')
+    expect(text()).toContain('Payouts capped by how many you have taken')
+    // Tradeify offers one type, so it came with the firm.
+    expect(
+      container
+        .querySelector('button[role="radio"][value="tradeify-growth"]')
+        ?.getAttribute('data-state'),
+    ).toBe('checked')
+
+    press('Continue')
+
+    // The size carries the money.
+    expect(headline()).toBe('Which account size?')
+    const offered = Array.from(
+      container.querySelectorAll('button[role="radio"]'),
+    ).map((b) => b.getAttribute('value'))
+    expect(offered).toEqual([
+      'tradeify-25k-growth',
+      'tradeify-50k-growth',
+      'tradeify-100k-growth',
+      'tradeify-150k-growth',
+    ])
+    expect(text()).toContain('Balance starts at $100,000')
+    expect(text()).toContain('$104,500 balance for a $2,000 first payout')
+    expect(text()).toContain('$1,000 minimum payout')
+
+    press('Continue')
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'Choose an account size to continue.',
+    )
+
+    choose('tradeify-100k-growth')
+    press('Continue')
+    // Growth graduates its payouts, so the schedule comes next.
+    expect(headline()).toBe('Where are you in your payout schedule?')
+  })
+
+  it('skips the size screen for a type that comes in one size', () => {
+    render()
+    choose('mffu')
+    press('Continue')
+
+    expect(headline()).toBe('Which account type?')
+    expect(text()).toContain('One size: 50k')
+    expect(text()).toContain('$2,000 max payout per request')
+
+    // Builder is already chosen with the firm, and its one size with it.
+    press('Continue')
+    expect(headline()).toBe('How do you want to track this payout?')
+    expect(header()).toContain('MyFundedFutures 50k Builder')
+  })
+
+  it('asks about the approach next', () => {
+    render()
+    toApproach()
 
     expect(headline()).toBe('How do you want to track this payout?')
     expect(text()).toContain('Point-in-time')
@@ -158,6 +282,7 @@ describe('walkthrough', () => {
 
   it('asks for a choice before moving on', () => {
     render()
+    toApproach()
     press('Continue')
 
     expect(headline()).toBe('How do you want to track this payout?')
@@ -166,7 +291,7 @@ describe('walkthrough', () => {
     )
   })
 
-  it('point-in-time: three numbers reproduce the workbook', () => {
+  it('point-in-time: the workbook numbers reproduce its plan', () => {
     render()
     pointInTimeTo('4758.34', '359', '6.6')
 
@@ -177,6 +302,7 @@ describe('walkthrough', () => {
     expect(headline()).toBe('Two more trading days at $355.70 each')
     expect(text()).toContain('Your numbers')
     expect(JSON.parse(window.localStorage.getItem('mpc.setup')!)).toMatchObject({
+      templateId: 'mffu-50k-builder',
       approach: 'pointInTime',
       strategy: 'conservative',
     })
@@ -184,6 +310,7 @@ describe('walkthrough', () => {
 
   it('rejects a blank amount', () => {
     render()
+    toApproach()
     choose('pointInTime')
     press('Continue')
     press('Continue')
@@ -238,7 +365,9 @@ describe('walkthrough', () => {
 
     // Aggressive needs 3 days here, so 3 is the lowest offered.
     const offered = Array.from(
-      container.querySelectorAll('[aria-labelledby="walkthrough-curated-days-label"] button'),
+      container.querySelectorAll(
+        '[aria-labelledby="walkthrough-curated-days-label"] button',
+      ),
     ).map((b) => b.textContent)
     expect(offered).toEqual(['3', '4', '5', '6', '7', '8', '9'])
 
@@ -283,6 +412,7 @@ describe('walkthrough', () => {
 
   it('day-by-day after a payout: balance, then days', () => {
     render()
+    toApproach()
     choose('dayByDay')
     press('Continue')
     choose('yes')
@@ -304,6 +434,7 @@ describe('walkthrough', () => {
 
   it('day-by-day before any payout works the balance out from logged days', () => {
     render()
+    toApproach()
     choose('dayByDay')
     press('Continue')
     choose('no')
@@ -318,16 +449,164 @@ describe('walkthrough', () => {
     choose('conservative')
     press('Show my plan')
 
-    // Balance = +$6.60: E3 = 4100 - 6.6 = 4093.40, I3 = 4086.80, J3 = 2.
+    // Balance = $0 start + $6.60: target 4100 - 6.6 = 4093.40 over 2 days.
     expect(headline()).toBe('Two more trading days at $2,043.40 each')
-    expect(text()).toContain('Sum of your logged days.')
+    expect(text()).toContain('Starting balance plus your logged days.')
+  })
+
+  it('moves to the firm’s theme the moment it is picked', () => {
+    render()
+    // The header names no account until one is chosen.
+    expect(header()).not.toContain('Growth')
+
+    choose('tradeify')
+    expect(document.documentElement.dataset.brand).toBe('tradeify')
+
+    press('Continue')
+    choose('tradeify-growth')
+    press('Continue')
+    choose('tradeify-100k-growth')
+    expect(header()).toContain('Tradeify 100k Growth')
+
+    press('Back')
+    press('Back')
+    choose('mffu')
+    expect(document.documentElement.dataset.brand).toBe('mffu')
+    // Its one type, and that type's one size, come with it.
+    expect(header()).toContain('MyFundedFutures 50k Builder')
+  })
+
+  it('leaves the theme as it was when the walkthrough is backed out of', () => {
+    seedDashboard()
+    seed({ 'mpc.brand': 'default', 'mpc.theme': 'light' })
+    render()
+    press('Change approach')
+    choose('tradeify')
+    expect(document.documentElement.dataset.brand).toBe('tradeify')
+
+    press('Keep my current setup')
+
+    expect(document.documentElement.dataset.brand).toBe('default')
+    expect(headline()).toBe('Two more trading days at $250.00 each')
+  })
+
+  it('a Tradeify account brings its own rules and theme', () => {
+    render()
+    toApproach('tradeify-50k-growth')
+    choose('pointInTime')
+    press('Continue')
+
+    expect(text()).toContain('It starts at $50,000.')
+    type(byLabel('Current balance'), '51000')
+    press('Continue')
+    type(byLabel('Largest profit day'), '900')
+    press('Continue')
+    type(byLabel('Cumulative profit'), '1200')
+    press('Continue')
+
+    expect(headline()).toBe(
+      'How many days have you traded since your last payout?',
+    )
+    expect(text()).toContain('Tradeify needs 5 trading days')
+    type(byLabel('Trading days so far'), '2')
+    press('Continue')
+    choose('conservative')
+    press('Show my plan')
+
+    expect(byLabel('Starting balance').value).toBe('50000')
+    expect(byLabel('Balance for max payout').value).toBe('53000')
+    expect(byLabel('Minimum payout').value).toBe('500')
+    expect(byLabel('Consistency rule').value).toBe('35')
+    expect(byLabel('Minimum trading days').value).toBe('5')
+    expect(document.documentElement.dataset.brand).toBe('tradeify')
+  })
+
+  it('asks where the trader is in a graduated payout schedule', () => {
+    render()
+    choose('tradeify')
+    press('Continue')
+    press('Continue')
+    choose('tradeify-50k-growth')
+    press('Continue')
+
+    expect(headline()).toBe('Where are you in your payout schedule?')
+    // The first payout, on the schedule the account is bought on today.
+    expect(text()).toContain('Payout 1 can be up to $1,500')
+    expect(text()).toContain('which needs a balance of $53,000')
+    // The firm's own qualifying balance already leaves room to spare, so
+    // the buffer asks for nothing extra and nothing warns.
+    expect(text()).toContain('leaves $1,400 of drawdown room')
+    expect(text()).not.toContain('of drawdown to play with')
+
+    // The account opens on a buffer of a quarter of its $2,000 drawdown.
+    expect(byLabel('Payout buffer').value).toBe('500')
+
+    // The fourth payout caps at $3,000, which cannot land on the $50,100
+    // floor, so it needs the floor plus that cap plus the buffer.
+    type(byLabel('Payouts taken so far'), '3')
+    expect(text()).toContain('Payout 4 can be up to $3,000')
+    expect(text()).toContain('as can every one after it')
+    expect(text()).toContain('which needs a balance of $53,600')
+    expect(text()).toContain('leaves $500 of drawdown room')
+    // The default is the same line the warning draws, so it stays quiet.
+    expect(text()).not.toContain('of drawdown to play with')
+
+    // Cut the buffer and the app says what that costs.
+    type(byLabel('Payout buffer'), '100')
+    expect(text()).toContain('which needs a balance of $53,200')
+    expect(text()).toContain('That leaves $100 of drawdown room')
+    expect(text()).toContain('started with $2,000 of drawdown')
+
+    // Nothing at all still clears the floor rather than landing on it.
+    type(byLabel('Payout buffer'), '0')
+    expect(text()).toContain('which needs a balance of $53,100')
+    expect(text()).toContain('That leaves $0 of drawdown room')
+    type(byLabel('Payout buffer'), '500')
+
+    // An account bought before the cutoff is on the older table.
+    press('Before it')
+    expect(text()).toContain('Payout 4 can be up to $2,250')
+    expect(text()).toContain('which needs a balance of $52,850')
+
+    type(byLabel('Payouts taken so far'), '0')
+    expect(text()).toContain('which needs a balance of $52,100')
+
+    press('Continue')
+    choose('pointInTime')
+    press('Continue')
+    type(byLabel('Current balance'), '52000')
+    press('Continue')
+    type(byLabel('Largest profit day'), '400')
+    press('Continue')
+    type(byLabel('Cumulative profit'), '900')
+    press('Continue')
+    type(byLabel('Trading days so far'), '5')
+    press('Continue')
+    choose('conservative')
+    press('Show my plan')
+
+    // The older schedule's $52,100 is what the rules were filled in with.
+    expect(byLabel('Balance for max payout').value).toBe('52100')
+    expect(JSON.parse(window.localStorage.getItem('mpc.setup')!)).toMatchObject({
+      templateId: 'tradeify-50k-growth',
+      era: 'before',
+      payoutsSoFar: 0,
+    })
+  })
+
+  it('skips the schedule screen for an account with one flat cap', () => {
+    render()
+    toApproach('tradeify-25k-growth')
+
+    // 25k Growth pays a flat $1,000 and has no before-cutoff table.
+    expect(headline()).toBe('How do you want to track this payout?')
   })
 
   it('skips the walkthrough for data saved before it existed', () => {
     seed({ 'mpc.days': [{ id: 'a', date: '2026-09-08', amount: '359.00' }] })
     render()
 
-    expect(headline()).not.toBe('How do you want to track this payout?')
+    expect(headline()).not.toBe('Which prop firm?')
     expect(ledgerRows()).toHaveLength(1)
   })
 
@@ -335,7 +614,7 @@ describe('walkthrough', () => {
     seedDashboard()
     render()
     press('Change approach')
-    expect(headline()).toBe('How do you want to track this payout?')
+    expect(headline()).toBe('Which prop firm?')
 
     press('Keep my current setup')
     expect(headline()).toBe('Two more trading days at $250.00 each')
@@ -356,15 +635,15 @@ describe('day-by-day dashboard', () => {
 
   it('derives largest day and net profit from daily entries', () => {
     render()
-    // A history that reproduces the workbook's saved D3=359 and F3=6.6.
+    // A history that reproduces the workbook's saved largest day and net.
     addDay('2026-09-08', '359')
     addDay('2026-09-09', '-212.40')
     addDay('2026-09-10', '-140')
 
     expect(ledgerRows()).toHaveLength(3)
     expect(headline()).toBe('Two more trading days at $355.70 each')
-    expect(text()).toContain('$718.00') // profit required (H3)
-    expect(text()).toContain('+$6.60') // net profit (F3)
+    expect(text()).toContain('$718.00') // profit required
+    expect(text()).toContain('+$6.60') // net profit
     // The tooltip trigger replaces the badge's data-slot, so match on text.
     const badges = Array.from(container.querySelectorAll('span')).filter(
       (el) => el.textContent === 'Largest day',
@@ -405,46 +684,79 @@ describe('day-by-day dashboard', () => {
     expect(text()).toContain('Enter the day’s profit or loss')
   })
 
-  it('shows the target-met state without dividing by zero', () => {
+  it('shows the payout-ready state without dividing by zero', () => {
     render()
     addDay('2026-09-08', '400')
     addDay('2026-09-09', '400')
 
-    expect(headline()).toBe('Payout target reached')
+    // Two trading days is also the firm's minimum, so nothing is left.
+    expect(headline()).toBe('Payout ready')
+    expect(text()).toContain('2 of 2')
     expect(text()).not.toContain('NaN')
     expect(text()).not.toContain('Infinity')
+  })
+
+  it('stretches the plan to cover the minimum trading days', () => {
+    seed({ 'mpc.rules': { ...WORKBOOK_RULES, minTradingDays: '5' } })
+    render()
+    addDay('2026-09-08', '900')
+
+    // $900 still to make, but one day traded of five, so it spreads over four.
+    expect(headline()).toBe('Four more trading days at $225.00 each')
+    expect(text()).toContain('because MyFundedFutures needs 4 more')
+    expect(text()).toContain('1 of 5')
   })
 
   it('locks the account settings until the lock is clicked', () => {
     render()
     const fields = [
       'Current balance',
-      'Payout buffer',
-      'Payout cap',
+      'Starting balance',
+      'Balance for max payout',
+      'Minimum payout',
       'Consistency rule',
+      'Minimum trading days',
     ].map(byLabel)
+    const picker = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Funded account"]',
+    )!
     const restore = Array.from(container.querySelectorAll('button')).find(
       (b) => b.textContent === 'Restore defaults',
     )!
 
+    expect(picker.textContent).toContain('50k Builder')
     expect(fields.every((f) => f.disabled)).toBe(true)
+    expect(picker.disabled).toBe(true)
     expect(restore.disabled).toBe(true)
 
     click('Unlock account settings')
     expect(fields.some((f) => f.disabled)).toBe(false)
+    expect(picker.disabled).toBe(false)
     expect(restore.disabled).toBe(false)
-    type(byLabel('Payout cap'), '1500')
-    expect(byLabel('Payout cap').value).toBe('1500')
+    type(byLabel('Balance for max payout'), '5000')
+    expect(byLabel('Balance for max payout').value).toBe('5000')
 
     click('Lock account settings')
     expect(fields.every((f) => f.disabled)).toBe(true)
+  })
+
+  it('puts the account rules back as the firm set them', () => {
+    render()
+    click('Unlock account settings')
+    type(byLabel('Consistency rule'), '20')
+    type(byLabel('Current balance'), '4200')
+    press('Restore defaults')
+
+    expect(byLabel('Consistency rule').value).toBe('50')
+    // The balance is the trader's own number, not one of the firm's rules.
+    expect(byLabel('Current balance').value).toBe('4200')
   })
 
   it('leaves logging days open while the account is locked', () => {
     render()
     addDay('2026-09-08', '359')
 
-    expect(byLabel('Payout cap').disabled).toBe(true)
+    expect(byLabel('Consistency rule').disabled).toBe(true)
     expect(byLabel('P&L on Sep 8').disabled).toBe(false)
     expect(ledgerRows()).toHaveLength(1)
   })
@@ -467,7 +779,7 @@ describe('day-by-day dashboard', () => {
     const toggle = container.querySelector<HTMLButtonElement>('#payout-taken')!
     act(() => toggle.click())
 
-    expect(text()).toContain('Sum of your logged days.')
+    expect(text()).toContain('Starting balance plus your logged days.')
     expect(container.querySelector('#account-balance')).toBeNull()
   })
 
@@ -507,9 +819,10 @@ describe('color themes', () => {
     // The light preference is kept for when a two-mode theme comes back.
     expect(JSON.parse(window.localStorage.getItem('mpc.theme')!)).toBe('light')
     // What index.html applies before first paint on the next visit.
-    expect(
-      JSON.parse(window.localStorage.getItem('mpc.appearance')!),
-    ).toEqual({ brand: 'mffu', scheme: 'dark' })
+    expect(JSON.parse(window.localStorage.getItem('mpc.appearance')!)).toEqual({
+      brand: 'mffu',
+      scheme: 'dark',
+    })
   })
 
   // Every registered theme, so a new firm is covered as soon as it's added.
@@ -521,18 +834,18 @@ describe('color themes', () => {
       render()
 
       expect(root.dataset.brand).toBe(theme.id)
-      expect(root.classList.contains('dark')).toBe(!theme.schemes.includes('light'))
+      expect(root.classList.contains('dark')).toBe(
+        !theme.schemes.includes('light'),
+      )
       expect(modeToggle() !== null).toBe(theme.schemes.length > 1)
 
-      // Firm themes swap the subtitle for the firm's logo.
-      const logo = container.querySelector('header img')
-      if (theme.logo) {
-        expect(logo?.getAttribute('alt')).toBe(theme.logo.alt)
-        expect(text()).not.toContain('MyFundedFutures 50k Builder')
-      } else {
-        expect(logo).toBeNull()
-        expect(text()).toContain('MyFundedFutures 50k Builder')
-      }
+      // The header names the account; the logo belongs to the firm, not the
+      // theme, so it sits with the account settings whichever theme is on.
+      expect(container.querySelector('header img')).toBeNull()
+      expect(header()).toContain('MyFundedFutures 50k Builder')
+      expect(
+        container.querySelector('aside img')?.getAttribute('alt'),
+      ).toBe('MyFundedFutures logo')
     },
   )
 
@@ -540,7 +853,7 @@ describe('color themes', () => {
     seed({ 'mpc.brand': 'mffu' })
     render()
 
-    expect(headline()).toBe('How do you want to track this payout?')
+    expect(headline()).toBe('Which prop firm?')
     expect(root.dataset.brand).toBe('mffu')
     expect(
       container.querySelector('button[aria-label="Color theme"]'),
@@ -568,33 +881,52 @@ describe('color themes', () => {
 })
 
 describe('point-in-time dashboard', () => {
-  function seedPointInTime(largest: string, cumulative: string) {
+  function seedPointInTime(
+    largest: string,
+    cumulative: string,
+    tradingDays = '3',
+  ) {
     seed({
       'mpc.setup': {
+        templateId: 'mffu-50k-builder',
         approach: 'pointInTime',
         payoutTaken: false,
         strategy: 'conservative',
       },
-      'mpc.account': WORKBOOK_ACCOUNT,
-      'mpc.snapshot': { largestProfitDay: largest, netProfit: cumulative },
+      'mpc.rules': WORKBOOK_RULES,
+      'mpc.snapshot': {
+        largestProfitDay: largest,
+        netProfit: cumulative,
+        tradingDays,
+      },
     })
   }
 
-  it('recalculates as the three numbers change', () => {
+  it('recalculates as the numbers change', () => {
     seedPointInTime('359', '6.6')
     render()
     expect(headline()).toBe('Two more trading days at $355.70 each')
 
-    // Balance moved in with the locked account settings; the other two
-    // point-in-time numbers stay editable.
+    // Balance moved in with the locked account settings; the point-in-time
+    // numbers stay editable.
     expect(byLabel('Current balance').disabled).toBe(true)
     expect(byLabel('Largest profit day').disabled).toBe(false)
     expect(byLabel('Cumulative profit').disabled).toBe(false)
+    expect(byLabel('Trading days so far').disabled).toBe(false)
 
     type(byLabel('Cumulative profit'), '800')
 
-    expect(headline()).toBe('Payout target reached')
+    expect(headline()).toBe('Payout ready')
     expect(ledgerRows()).toHaveLength(0)
+  })
+
+  it('holds the plan open until the minimum trading days are met', () => {
+    seedPointInTime('359', '800', '0')
+    render()
+
+    // The profit is there, so the plan exists only to cover the two days.
+    expect(headline()).toBe('Two more trading days to qualify')
+    expect(text()).toContain('0 of 2')
   })
 
   it('switches between conservative and aggressive plans', () => {
@@ -631,5 +963,34 @@ describe('point-in-time dashboard', () => {
     type(byLabel('Daily cap'), '700')
     expect(headline()).toBe('Four more trading days at $525.00 each')
     expect(text()).toContain('Each day stays at or under your $700.00 cap.')
+  })
+
+  it('a Tradeify account needs five trading days before a payout', () => {
+    seed({
+      'mpc.setup': {
+        templateId: 'tradeify-50k-growth',
+        approach: 'pointInTime',
+        payoutTaken: false,
+        strategy: 'conservative',
+      },
+      'mpc.rules': {
+        balance: '60000',
+        startingBalance: '50000',
+        payoutThreshold: '53000',
+        minimumPayout: '0',
+        consistency: '35',
+        minTradingDays: '5',
+      },
+      'mpc.snapshot': {
+        largestProfitDay: '1000',
+        netProfit: '5000',
+        tradingDays: '2',
+      },
+    })
+    render()
+
+    expect(headline()).toBe('Three more trading days to qualify')
+    expect(text()).toContain('Tradeify needs 3 more trading days')
+    expect(text()).toContain('2 of 5')
   })
 })
