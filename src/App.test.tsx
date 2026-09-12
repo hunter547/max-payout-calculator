@@ -978,9 +978,10 @@ describe('point-in-time dashboard', () => {
         balance: '60000',
         startingBalance: '50000',
         payoutThreshold: '53000',
-        minimumPayout: '0',
+        minimumPayout: '500',
         consistency: '35',
         minTradingDays: '5',
+        qualifyingDayProfit: '150',
       },
       'mpc.snapshot': {
         largestProfitDay: '1000',
@@ -990,8 +991,20 @@ describe('point-in-time dashboard', () => {
     })
     render()
 
-    expect(headline()).toBe('Three more trading days to qualify')
+    // The profit is there, so the headline carries the bar a day has to beat
+    // rather than an amount to make.
+    expect(headline()).toBe('Three more trading days over $150.00')
     expect(text()).toContain('Tradeify needs 3 more trading days')
+    expect(text()).toContain('a day has to beat that to be one of them')
     expect(text()).toContain('2 of 5')
+  })
+
+  it('says only qualify where the firm counts every day traded', () => {
+    seedPointInTime('359', '800', '0')
+    render()
+
+    // The workbook's account has no profit bar, so there is none to name.
+    expect(headline()).toBe('Two more trading days to qualify')
+    expect(text()).toContain('whatever those days make')
   })
 })

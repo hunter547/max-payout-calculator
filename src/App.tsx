@@ -158,18 +158,19 @@ function verdict(
   const days = plan.days
   const dayWord = days === 1 ? 'day' : 'days'
 
-  // The profit is already there; only the firm's trading days are missing.
+  // The profit is already there; only the firm's trading days are missing, so
+  // the headline carries the bar a day has to beat rather than an amount to
+  // hit — over it, not at it.
   if (results.targetMet) {
-    const each =
-      qualifyingDayProfit > 0
-        ? `each making more than ${formatCurrency(qualifyingDayProfit)} to count`
-        : 'whatever those days make'
+    const bar = qualifyingDayProfit > 0 ? formatCurrency(qualifyingDayProfit) : null
+    const dayWords = days === 1 ? 'One more trading day' : `${countWord(days)} more trading days`
     return {
-      title:
-        days === 1
-          ? 'One more trading day to qualify'
-          : `${countWord(days)} more trading days to qualify`,
-      detail: `Net profit of ${formatCurrency(netProfit)} already clears the ${formatCurrency(results.minimumNetProfitRequired)} required. ${firm} needs ${results.eligibilityDaysLeft} more trading ${results.eligibilityDaysLeft === 1 ? 'day' : 'days'} before it will pay out, ${each}.`,
+      title: bar ? `${dayWords} over ${bar}` : `${dayWords} to qualify`,
+      detail: `Net profit of ${formatCurrency(netProfit)} already clears the ${formatCurrency(results.minimumNetProfitRequired)} required. ${firm} needs ${results.eligibilityDaysLeft} more trading ${results.eligibilityDaysLeft === 1 ? 'day' : 'days'} before it will pay out, ${
+        bar
+          ? 'and a day has to beat that to be one of them'
+          : 'whatever those days make'
+      }.`,
     }
   }
 
