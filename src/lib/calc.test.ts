@@ -26,6 +26,8 @@ const SHEET_INPUTS: CalcInputs = {
   tradingDaysSoFar: 3,
   // MyFundedFutures counts every day traded, win or lose.
   qualifyingDayProfit: 0,
+  // It gates on balance, not on profit earned since the last payout.
+  profitGoal: 0,
 }
 
 describe('calculate — parity with the spreadsheet', () => {
@@ -107,6 +109,59 @@ describe('consistency guardrail', () => {
   })
 })
 
+describe('profit goals', () => {
+  // A Tradeify Lightning 50k: no balance to reach, but $3,000 of profit to
+  // earn since the last payout before the first one unlocks.
+  const lightning: CalcInputs = {
+    balance: 50000,
+    payoutThreshold: 52600,
+    minimumPayout: 1000,
+    profitGoal: 3000,
+    largestProfitDay: 0,
+    currentNetProfit: 0,
+    consistencyRequirement: 0.2,
+    minTradingDays: 0,
+    tradingDaysSoFar: 0,
+    qualifyingDayProfit: 0,
+  }
+
+  it('takes the goal when it beats the balance shortfall and the minimum', () => {
+    const r = calculate(lightning)
+    // The balance is only $2,600 short, and the minimum payout $1,000, but
+    // the goal is what has to be earned.
+    expect(r.minimumTargetNetProfit).toBe(3000)
+    expect(r.minimumNetProfitRequired).toBe(3000)
+  })
+
+  it('still answers to the consistency rule and the balance', () => {
+    // A big day pushes the requirement past the goal: 20% means the largest
+    // day can be at most a fifth of the total.
+    const withDay = { ...lightning, largestProfitDay: 900, currentNetProfit: 900 }
+    expect(calculate(withDay).minimumNetProfitRequired).toBe(4500)
+
+    // And a balance far enough behind still wins.
+    const behind = { ...lightning, balance: 40000 }
+    expect(calculate(behind).minimumTargetNetProfit).toBe(12600)
+  })
+
+  it('leaves accounts without a goal exactly as they were', () => {
+    const r = calculate({ ...lightning, profitGoal: 0 })
+    expect(r.minimumTargetNetProfit).toBe(2600) // the balance shortfall
+    expect(calculate(SHEET_INPUTS).minimumTargetNetProfit).toBe(500)
+  })
+
+  it('plans the goal out over days with no firm minimum to meet', () => {
+    const r = calculate(lightning)
+    expect(r.eligibilityDaysLeft).toBe(0)
+    // 20% consistency means five days at $600, the cap being 20% of $3,000.
+    expect(r.maxAllowedSingleDay).toBe(600)
+    const plan = planFor(lightning, r, 'conservative')
+    expect(plan.days).toBe(5)
+    expect(plan.dailyProfit).toBe(600)
+    expect(plan.heldByEligibility).toBe(false)
+  })
+})
+
 describe('minimum trading days', () => {
   // Tradeify's Growth rules: five trading days before any payout.
   const growth: CalcInputs = {
@@ -120,6 +175,7 @@ describe('minimum trading days', () => {
     tradingDaysSoFar: 1,
     // A 25k Growth day counts once it beats $100.
     qualifyingDayProfit: 100,
+    profitGoal: 0,
   }
 
   it('counts the days the firm still needs', () => {

@@ -3,7 +3,7 @@
  * "MyFundedFutrures 50k Builder Max Payout Calculator.xlsx" (Sheet1), then
  * generalised so other firms' account rules fit the same shape:
  *
- *   E3 Minimum target net profit   =MAX(minimum payout, payout threshold - balance)
+ *   E3 Minimum target net profit   =MAX(minimum payout, profit goal, payout threshold - balance)
  *   H3 Minimum net profit required =MAX(E3, ABS(largest day) / consistency)
  *   I3 Remaining profit needed     =H3 - net profit
  *   J3 Minimum trading days left   =CEILING.MATH(I3 / (H3 * consistency))
@@ -32,6 +32,12 @@ export interface CalcInputs {
   payoutThreshold: number
   /** Profit a payout needs regardless of the threshold; 0 when there is none. */
   minimumPayout: number
+  /**
+   * Profit to earn since the last payout before one can be requested; 0 where
+   * the firm gates on balance instead. It resets with each payout, which is
+   * what net profit already counts from.
+   */
+  profitGoal: number
   largestProfitDay: number
   currentNetProfit: number
   /** Fraction, not percent: 0.5 means 50%. */
@@ -90,6 +96,7 @@ export function calculate(inputs: CalcInputs): CalcResults {
     balance,
     payoutThreshold,
     minimumPayout,
+    profitGoal,
     largestProfitDay,
     currentNetProfit,
     consistencyRequirement: consistency,
@@ -98,9 +105,11 @@ export function calculate(inputs: CalcInputs): CalcResults {
     qualifyingDayProfit,
   } = inputs
 
-  // E3 =MAX(minimum payout, threshold - balance)
+  // E3 =MAX(minimum payout, threshold - balance), widened by the profit a
+  // firm wants earned since the last payout where it sets one.
   const minimumTargetNetProfit = Math.max(
     minimumPayout,
+    profitGoal,
     payoutThreshold - balance,
   )
 

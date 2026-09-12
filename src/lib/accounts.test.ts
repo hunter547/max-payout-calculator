@@ -8,6 +8,7 @@ import {
   accountLabel,
   accountsFor,
   ACCOUNT_PROGRAMS,
+  consistencyFor,
   defaultBuffer,
   DEFAULT_PAYOUT_BUFFER,
   drawdownRoomAt,
@@ -18,6 +19,7 @@ import {
   nextPayoutNumber,
   payoutCap,
   payoutThreshold,
+  profitGoal,
   programOf,
   programsFor,
   rulesFor,
@@ -254,6 +256,70 @@ describe('account templates', () => {
     expect(accountTemplate('mffu-50k-builder').qualifyingDayProfit).toBe(0)
   })
 
+  it('carries the Lightning rules, which move with the payout number', () => {
+    const template = accountTemplate('tradeify-50k-lightning')
+    expect(template).toMatchObject({
+      programId: 'tradeify-lightning',
+      startingBalance: 50000,
+      // Straight to funded, with no minimum trading days at all.
+      minTradingDays: 0,
+      drawdown: 2000,
+    })
+
+    // A payout unlocks on profit earned since the last one, not on balance.
+    expect(template.payout.qualifyingBalance).toBe(0)
+    expect([0, 1, 2, 5].map((n) => profitGoal(template.payout, n))).toEqual([
+      3000, 2000, 2000, 2000,
+    ])
+    // The cap holds for three payouts, then rises once.
+    expect([0, 1, 2, 3].map((n) => payoutCap(template.payout, n))).toEqual([
+      2000, 2000, 2000, 2500,
+    ])
+    // And the consistency rule tightens as the payouts add up.
+    expect([0, 1, 2, 9].map((n) => consistencyFor(template, 'current', n))).toEqual([
+      0.2, 0.25, 0.3, 0.3,
+    ])
+    // Accounts bought before the cutoff keep 20% throughout.
+    expect([0, 1, 9].map((n) => consistencyFor(template, 'before', n))).toEqual([
+      0.2, 0.2, 0.2,
+    ])
+    expect(hasSchedule(template)).toBe(true)
+  })
+
+  it('keeps the older profit goals for Lightning bought before the cutoff', () => {
+    // The two larger sizes had a third, lower goal from the third payout on.
+    const goals = (id: string, era: 'current' | 'before') =>
+      [0, 1, 2, 3].map((n) => profitGoal(scheduleFor(accountTemplate(id), era), n))
+
+    expect(goals('tradeify-100k-lightning', 'current')).toEqual([
+      6000, 3500, 3500, 3500,
+    ])
+    expect(goals('tradeify-100k-lightning', 'before')).toEqual([
+      6000, 3000, 2500, 2500,
+    ])
+    expect(goals('tradeify-150k-lightning', 'before')).toEqual([
+      9000, 4500, 3000, 3000,
+    ])
+  })
+
+  it('writes the payout number into the consistency rule as well', () => {
+    const template = accountTemplate('tradeify-50k-lightning')
+    expect(rulesFor(template, 'current', 0)).toMatchObject({
+      profitGoal: '3000',
+      consistency: '20',
+      minTradingDays: '0',
+    })
+    expect(rulesFor(template, 'current', 1)).toMatchObject({
+      profitGoal: '2000',
+      consistency: '25',
+    })
+    expect(rulesFor(template, 'current', 2).consistency).toBe('30')
+    expect(rulesFor(template, 'before', 2).consistency).toBe('20')
+    // Accounts whose rule never moves keep writing their own.
+    expect(rulesFor(accountTemplate('tradeify-50k-growth')).consistency).toBe('35')
+    expect(rulesFor(accountTemplate('mffu-50k-builder')).profitGoal).toBe('0')
+  })
+
   it('falls back to the default for an unknown id', () => {
     expect(accountTemplate('no-such-account').id).toBe(DEFAULT_TEMPLATE)
   })
@@ -263,6 +329,7 @@ describe('account templates', () => {
       balance: '100000',
       startingBalance: '100000',
       payoutThreshold: '104500',
+      profitGoal: '0',
       minimumPayout: '1000',
       consistency: '35',
       minTradingDays: '5',

@@ -179,11 +179,10 @@ describe('walkthrough', () => {
       img.getAttribute('alt'),
     )
     expect(logos).toEqual(['MyFundedFutures logo', 'Tradeify logo'])
-    expect(text()).toContain('Builder accounts')
-    expect(text()).toContain('2 sizes, 25k to 50k')
-    expect(text()).toContain('Growth accounts')
-    expect(text()).toContain('4 sizes, 25k to 150k')
-    expect(text()).toContain('35% consistency rule')
+    // One line per account type the firm offers.
+    expect(text()).toContain('Builder: 2 sizes, 25k to 50k')
+    expect(text()).toContain('Growth: 4 sizes, 25k to 150k')
+    expect(text()).toContain('Lightning: 4 sizes, 25k to 150k')
   })
 
   it('asks for a firm before moving on', () => {
@@ -207,13 +206,16 @@ describe('walkthrough', () => {
     expect(text()).toContain('35% consistency rule')
     expect(text()).toContain('5 trading days minimum')
     expect(text()).toContain('Payouts capped by how many you have taken')
-    // Tradeify offers one type, so it came with the firm.
-    expect(
-      container
-        .querySelector('button[role="radio"][value="tradeify-growth"]')
-        ?.getAttribute('data-state'),
-    ).toBe('checked')
+    // Lightning sits beside it, on its own rules.
+    expect(text()).toContain('20% consistency rule, rising to 30%')
+    expect(text()).toContain('No minimum trading days')
 
+    press('Continue')
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'Choose an account type to continue.',
+    )
+
+    choose('tradeify-growth')
     press('Continue')
 
     // The size carries the money.
@@ -538,6 +540,7 @@ describe('walkthrough', () => {
     render()
     choose('tradeify')
     press('Continue')
+    choose('tradeify-growth')
     press('Continue')
     choose('tradeify-50k-growth')
     press('Continue')
@@ -545,10 +548,10 @@ describe('walkthrough', () => {
     expect(headline()).toBe('Where are you in your payout schedule?')
     // The first payout, on the schedule the account is bought on today.
     expect(text()).toContain('Payout 1 can be up to $1,500')
-    expect(text()).toContain('which needs a balance of $53,000')
+    expect(text()).toContain('The balance it needs is $53,000')
     // The firm's own qualifying balance already leaves room to spare, so
     // the buffer asks for nothing extra and nothing warns.
-    expect(text()).toContain('leaves $1,400 of drawdown room')
+    expect(text()).toContain('leaving $1,400 of drawdown room')
     expect(text()).not.toContain('of drawdown to play with')
 
     // The account opens on a buffer of a quarter of its $2,000 drawdown.
@@ -559,30 +562,30 @@ describe('walkthrough', () => {
     type(byLabel('Payouts taken so far'), '3')
     expect(text()).toContain('Payout 4 can be up to $3,000')
     expect(text()).toContain('as can every one after it')
-    expect(text()).toContain('which needs a balance of $53,600')
-    expect(text()).toContain('leaves $500 of drawdown room')
+    expect(text()).toContain('The balance it needs is $53,600')
+    expect(text()).toContain('leaving $500 of drawdown room')
     // The default is the same line the warning draws, so it stays quiet.
     expect(text()).not.toContain('of drawdown to play with')
 
     // Cut the buffer and the app says what that costs.
     type(byLabel('Payout buffer'), '100')
-    expect(text()).toContain('which needs a balance of $53,200')
+    expect(text()).toContain('The balance it needs is $53,200')
     expect(text()).toContain('That leaves $100 of drawdown room')
     expect(text()).toContain('started with $2,000 of drawdown')
 
     // Nothing at all still clears the floor rather than landing on it.
     type(byLabel('Payout buffer'), '0')
-    expect(text()).toContain('which needs a balance of $53,100')
+    expect(text()).toContain('The balance it needs is $53,100')
     expect(text()).toContain('That leaves $0 of drawdown room')
     type(byLabel('Payout buffer'), '500')
 
     // An account bought before the cutoff is on the older table.
     press('Before it')
     expect(text()).toContain('Payout 4 can be up to $2,250')
-    expect(text()).toContain('which needs a balance of $52,850')
+    expect(text()).toContain('The balance it needs is $52,850')
 
     type(byLabel('Payouts taken so far'), '0')
-    expect(text()).toContain('which needs a balance of $52,100')
+    expect(text()).toContain('The balance it needs is $52,100')
 
     press('Continue')
     choose('pointInTime')

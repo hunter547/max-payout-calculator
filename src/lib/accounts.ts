@@ -63,6 +63,12 @@ export const ACCOUNT_PROGRAMS: readonly AccountProgram[] = [
     name: 'Growth',
     cutoff: { date: 'September 12, 2025', time: '8:00 AM EST' },
   },
+  {
+    id: 'tradeify-lightning',
+    firmId: 'tradeify',
+    name: 'Lightning',
+    cutoff: { date: 'September 12, 2025', time: '8:00 AM EST' },
+  },
 ]
 
 /**
@@ -77,6 +83,17 @@ export const ACCOUNT_PROGRAMS: readonly AccountProgram[] = [
 export interface PayoutSchedule {
   /** Max withdrawal per request, by payout number. The last entry repeats. */
   caps: readonly number[]
+  /**
+   * Profit to earn since the last payout before one can be requested, by
+   * payout number. Absent where a firm gates on balance instead; where it is
+   * set the goal resets each cycle, so nothing carries over.
+   */
+  goals?: readonly number[]
+  /**
+   * Consistency rule by payout number, where a firm raises it as payouts add
+   * up. Absent where one rule holds throughout, which is the template's own.
+   */
+  consistencies?: readonly number[]
   /** The smallest request the firm accepts. */
   minimumPayout: number
   /** The balance a payout request needs at all, 0 where none is published. */
@@ -253,6 +270,126 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
       floorBreaches: true,
     },
   },
+  {
+    id: 'tradeify-25k-lightning',
+    programId: 'tradeify-lightning',
+    name: '25k',
+    startingBalance: 25000,
+    // The rule for a first payout; it rises with the payout number below.
+    consistency: 0.2,
+    minTradingDays: 0,
+    qualifyingDayProfit: 0,
+    drawdown: 1000,
+    payout: {
+      caps: [1000],
+      goals: [1500, 1000],
+      consistencies: [0.2, 0.25, 0.3],
+      minimumPayout: 1000,
+      qualifyingBalance: 0,
+      floor: 25100,
+      floorBreaches: true,
+    },
+    before: {
+      caps: [1000],
+      goals: [1500, 1000],
+      // Accounts bought before the cutoff keep 20% for every payout.
+      consistencies: [0.2],
+      minimumPayout: 1000,
+      qualifyingBalance: 0,
+      floor: 25100,
+      floorBreaches: true,
+    },
+  },
+  {
+    id: 'tradeify-50k-lightning',
+    programId: 'tradeify-lightning',
+    name: '50k',
+    startingBalance: 50000,
+    // The rule for a first payout; it rises with the payout number below.
+    consistency: 0.2,
+    minTradingDays: 0,
+    qualifyingDayProfit: 0,
+    drawdown: 2000,
+    payout: {
+      caps: [2000, 2000, 2000, 2500],
+      goals: [3000, 2000],
+      consistencies: [0.2, 0.25, 0.3],
+      minimumPayout: 1000,
+      qualifyingBalance: 0,
+      floor: 50100,
+      floorBreaches: true,
+    },
+    before: {
+      caps: [2000, 2000, 2000, 2500],
+      goals: [3000, 2000],
+      // Accounts bought before the cutoff keep 20% for every payout.
+      consistencies: [0.2],
+      minimumPayout: 1000,
+      qualifyingBalance: 0,
+      floor: 50100,
+      floorBreaches: true,
+    },
+  },
+  {
+    id: 'tradeify-100k-lightning',
+    programId: 'tradeify-lightning',
+    name: '100k',
+    startingBalance: 100000,
+    // The rule for a first payout; it rises with the payout number below.
+    consistency: 0.2,
+    minTradingDays: 0,
+    qualifyingDayProfit: 0,
+    drawdown: 4000,
+    payout: {
+      caps: [2500, 2500, 2500, 3000],
+      goals: [6000, 3500],
+      consistencies: [0.2, 0.25, 0.3],
+      minimumPayout: 1000,
+      qualifyingBalance: 0,
+      floor: 100100,
+      floorBreaches: true,
+    },
+    before: {
+      caps: [2500, 2500, 2500, 3000],
+      goals: [6000, 3000, 2500],
+      // Accounts bought before the cutoff keep 20% for every payout.
+      consistencies: [0.2],
+      minimumPayout: 1000,
+      qualifyingBalance: 0,
+      floor: 100100,
+      floorBreaches: true,
+    },
+  },
+  {
+    id: 'tradeify-150k-lightning',
+    programId: 'tradeify-lightning',
+    name: '150k',
+    startingBalance: 150000,
+    // The rule for a first payout; it rises with the payout number below.
+    consistency: 0.2,
+    minTradingDays: 0,
+    qualifyingDayProfit: 0,
+    drawdown: 5250,
+    payout: {
+      caps: [3000, 3000, 3000, 3500],
+      goals: [9000, 4500],
+      consistencies: [0.2, 0.25, 0.3],
+      minimumPayout: 1000,
+      qualifyingBalance: 0,
+      floor: 150100,
+      floorBreaches: true,
+    },
+    before: {
+      caps: [3000, 3000, 3000, 3500],
+      goals: [9000, 4500, 3000],
+      // Accounts bought before the cutoff keep 20% for every payout.
+      consistencies: [0.2],
+      minimumPayout: 1000,
+      qualifyingBalance: 0,
+      floor: 150100,
+      floorBreaches: true,
+    },
+  },
 ]
 
 /**
@@ -357,7 +494,7 @@ export function scheduleFor(
 
 /** Whether the trader has anything to say about this account's schedule. */
 export function hasSchedule(template: AccountTemplate): boolean {
-  return template.payout.caps.length > 1 || template.before !== undefined
+  return graduates(template.payout) || template.before !== undefined
 }
 
 /** The payout being worked towards: the one after those already taken. */
@@ -365,10 +502,42 @@ export function nextPayoutNumber(payoutsSoFar: number): number {
   return Math.max(1, Math.floor(payoutsSoFar) + 1)
 }
 
+/** The entry for a payout number, with the last one holding from there on. */
+function byPayout(steps: readonly number[], payoutsSoFar: number): number {
+  const n = nextPayoutNumber(payoutsSoFar)
+  return steps[Math.min(n, steps.length) - 1]
+}
+
 /** The most one request may withdraw, at that payout number. */
 export function payoutCap(schedule: PayoutSchedule, payoutsSoFar: number): number {
-  const n = nextPayoutNumber(payoutsSoFar)
-  return schedule.caps[Math.min(n, schedule.caps.length) - 1]
+  return byPayout(schedule.caps, payoutsSoFar)
+}
+
+/**
+ * Profit to earn since the last payout before this one unlocks, or 0 where
+ * the firm gates on balance instead.
+ */
+export function profitGoal(schedule: PayoutSchedule, payoutsSoFar: number): number {
+  return schedule.goals ? byPayout(schedule.goals, payoutsSoFar) : 0
+}
+
+/** The consistency rule at that payout number, as a fraction. */
+export function consistencyFor(
+  template: AccountTemplate,
+  era: Era = 'current',
+  payoutsSoFar = 0,
+): number {
+  const { consistencies } = scheduleFor(template, era)
+  return consistencies ? byPayout(consistencies, payoutsSoFar) : template.consistency
+}
+
+/** Whether a schedule's terms move with the payout number at all. */
+export function graduates(schedule: PayoutSchedule): boolean {
+  return (
+    schedule.caps.length > 1 ||
+    (schedule.goals?.length ?? 0) > 1 ||
+    (schedule.consistencies?.length ?? 0) > 1
+  )
 }
 
 /** How much room a payout of that size leaves above a breaching floor. */
@@ -405,6 +574,7 @@ export function payoutThreshold(
 export type RuleKey =
   | 'startingBalance'
   | 'payoutThreshold'
+  | 'profitGoal'
   | 'minimumPayout'
   | 'consistency'
   | 'minTradingDays'
@@ -423,8 +593,12 @@ export function rulesFor(
   return {
     startingBalance: String(template.startingBalance),
     payoutThreshold: String(payoutThreshold(schedule, payoutsSoFar, buffer)),
+    profitGoal: String(profitGoal(schedule, payoutsSoFar)),
     minimumPayout: String(schedule.minimumPayout),
-    consistency: String(template.consistency * 100),
+    // Rounded because a fraction like 0.35 * 100 can land just off.
+    consistency: String(
+      Math.round(consistencyFor(template, era, payoutsSoFar) * 10000) / 100,
+    ),
     minTradingDays: String(template.minTradingDays),
     qualifyingDayProfit: String(template.qualifyingDayProfit),
   }

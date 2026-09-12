@@ -39,6 +39,12 @@ const RULES: { key: RuleKey; label: string; unit: FieldUnit; hint: string }[] = 
     hint: 'Balance you need before the biggest payout can be requested. Set by the payout schedule above.',
   },
   {
+    key: 'profitGoal',
+    label: 'Profit goal',
+    unit: '$',
+    hint: 'Profit to earn since your last payout before one can be requested. 0 where the firm asks for a balance instead.',
+  },
+  {
     key: 'minimumPayout',
     label: 'Minimum payout',
     unit: '$',

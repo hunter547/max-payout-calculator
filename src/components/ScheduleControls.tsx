@@ -1,21 +1,24 @@
+import type { ReactNode } from 'react'
 import { TriangleAlert } from 'lucide-react'
 import { MoneyField } from '@/components/MoneyField'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Label } from '@/components/ui/label'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
+  consistencyFor,
   drawdownRoomAt,
   firmOf,
   nextPayoutNumber,
   payoutCap,
   payoutThreshold,
+  profitGoal,
   programOf,
   roomIsThin,
   scheduleFor,
   type AccountTemplate,
   type Era,
 } from '@/lib/accounts'
-import { formatRule } from '@/lib/format'
+import { formatPercent, formatRule } from '@/lib/format'
 import { parseAmount } from '@/lib/ledger'
 import { cn } from '@/lib/utils'
 
@@ -37,6 +40,13 @@ interface ScheduleControlsProps {
 
 const SEGMENT =
   'px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground'
+
+/** A figure inside a sentence: the numbers are what the eye is looking for. */
+function Figure({ children }: { children: ReactNode }) {
+  return (
+    <span className="font-figure font-semibold text-foreground">{children}</span>
+  )
+}
 
 /**
  * The two things that decide what a payout may be worth: how many the trader
@@ -62,6 +72,9 @@ export function ScheduleControls({
   const schedule = scheduleFor(template, era)
   const next = nextPayoutNumber(taken)
   const cap = payoutCap(schedule, taken)
+  const goal = profitGoal(schedule, taken)
+  const consistency = consistencyFor(template, era, taken)
+  const risingConsistency = (schedule.consistencies?.length ?? 0) > 1
   const buffer = Math.max(0, parseAmount(payoutBuffer))
   const threshold = payoutThreshold(schedule, taken, buffer)
   // What the payout actually leaves: the buffer, or more where the firm's
@@ -128,24 +141,28 @@ export function ScheduleControls({
 
       <p className="text-sm leading-snug text-muted-foreground">
         Payout {next} can be up to{' '}
-        <span className="font-figure font-semibold text-foreground">
-          {formatRule(cap)}
-        </span>
-        {capped && schedule.caps.length > 1 ? ', as can every one after it,' : ','}{' '}
-        which needs a balance of{' '}
-        <span className="font-figure font-semibold text-foreground">
-          {formatRule(threshold)}
-        </span>
+        <Figure>{formatRule(cap)}</Figure>
+        {capped && schedule.caps.length > 1
+          ? ', as can every one after it. '
+          : '. '}
+        {goal > 0 && (
+          <>
+            It unlocks at <Figure>{formatRule(goal)}</Figure> of profit since
+            your last payout, which resets with every one.{' '}
+          </>
+        )}
+        {risingConsistency && (
+          <>
+            Its consistency rule is{' '}
+            <Figure>{formatPercent(consistency)}</Figure>.{' '}
+          </>
+        )}
+        The balance it needs is <Figure>{formatRule(threshold)}</Figure>
         {left === null ? (
           '.'
         ) : (
           <>
-            {' '}
-            and leaves{' '}
-            <span className="font-figure font-semibold text-foreground">
-              {formatRule(left)}
-            </span>{' '}
-            of drawdown room.
+            , leaving <Figure>{formatRule(left)}</Figure> of drawdown room.
           </>
         )}
       </p>

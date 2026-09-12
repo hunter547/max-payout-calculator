@@ -52,6 +52,27 @@ describe('stepsFor', () => {
     ])
   })
 
+  it('drops the trading-days screen where a firm sets no minimum', () => {
+    const steps = stepsFor({
+      approach: 'pointInTime',
+      payoutTaken: null,
+      programId: 'tradeify-lightning',
+      templateId: 'tradeify-50k-lightning',
+    })
+    // Lightning has no minimum trading days, so there is nothing to ask.
+    expect(steps).not.toContain('tradingDays')
+    expect(steps).toContain('cumulative')
+    // Growth does have one.
+    expect(
+      stepsFor({
+        approach: 'pointInTime',
+        payoutTaken: null,
+        programId: 'tradeify-growth',
+        templateId: 'tradeify-50k-growth',
+      }),
+    ).toContain('tradingDays')
+  })
+
   it('shows the size screen only where a type comes in more than one', () => {
     for (const program of ACCOUNT_PROGRAMS) {
       const sizes = sizesFor(program.id)
@@ -132,6 +153,7 @@ describe('deriveInputs', () => {
       minTradingDays: 2,
       tradingDaysSoFar: 3,
       qualifyingDayProfit: 0,
+      profitGoal: 0,
     })
   })
 

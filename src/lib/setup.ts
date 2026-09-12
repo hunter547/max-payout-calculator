@@ -127,13 +127,19 @@ export function stepsFor(
       ? [...account, 'approach', 'payout', 'balance', 'days', 'strategy']
       : [...account, 'approach', 'payout', 'days', 'strategy']
   }
+  // A firm with no minimum has no trading days to ask about.
+  const days: StepId[] =
+    draft.templateId && accountTemplate(draft.templateId).minTradingDays > 0
+      ? ['tradingDays']
+      : []
+
   return [
     ...account,
     'approach',
     'balance',
     'largest',
     'cumulative',
-    'tradingDays',
+    ...days,
     'strategy',
   ]
 }
@@ -166,6 +172,7 @@ export function deriveInputs(
       : startingBalance + summary.netProfit,
     payoutThreshold: parseAmount(account.payoutThreshold),
     minimumPayout: parseAmount(account.minimumPayout),
+    profitGoal: Math.max(0, parseAmount(account.profitGoal)),
     largestProfitDay: pointInTime
       ? parseAmount(source.largestProfitDay)
       : summary.largestProfitDay,

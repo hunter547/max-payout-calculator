@@ -37,6 +37,9 @@ its own it fills in — a firm with one type picks it, and a type with one size
 skips the size screen entirely. Both firms offer more than one size today, so
 both ask.
 
+A firm with no minimum trading days skips that question later on, the way a
+single-size type skips its own.
+
 Accounts whose payouts are graduated, or whose terms changed on a date, then
 get one more screen: **where are you in your payout schedule?** It asks how many
 payouts you have taken, the buffer you want a payout to leave behind, and where
@@ -138,6 +141,14 @@ the lock, and "Restore defaults" puts the template's rules back.
 | Tradeify | Growth | 50k | $50,000 | $53,000 | 35% | 5 | $150 | $500 |
 | Tradeify | Growth | 100k | $100,000 | $104,500 | 35% | 5 | $200 | $1,000 |
 | Tradeify | Growth | 150k | $150,000 | $156,500 | 35% | 5 | $250 | $1,500 |
+| Tradeify | Lightning | 25k | $25,000 | — | 20% → 30% | none | — | $1,000 |
+| Tradeify | Lightning | 50k | $50,000 | — | 20% → 30% | none | — | $1,000 |
+| Tradeify | Lightning | 100k | $100,000 | — | 20% → 30% | none | — | $1,000 |
+| Tradeify | Lightning | 150k | $150,000 | — | 20% → 30% | none | — | $1,000 |
+
+Lightning has no qualifying balance because it gates on profit earned rather
+than balance reached — see [Profit goals](#profit-goals) — and its consistency
+rule tightens with each payout.
 
 Consistency and minimum days sit on the template rather than the type, so a
 firm that varies them by size can say so; the type screen reads them off its
@@ -151,6 +162,8 @@ The balance a max payout needs is not a fixed number for every firm. A
 | Field | Meaning |
 |-------|---------|
 | `caps` | the most one request may withdraw, by payout number; the last entry repeats |
+| `goals` | profit to earn since the last payout before one unlocks, by payout number |
+| `consistencies` | the consistency rule by payout number, where a firm raises it |
 | `minimumPayout` | the smallest request the firm accepts |
 | `qualifyingBalance` | the balance a payout request needs at all, 0 where none is published |
 | `floor` | what has to remain afterwards |
@@ -229,10 +242,15 @@ it is always locked. A bigger cap can therefore need more than the published
 qualifying balance; see [Drawdown room](#drawdown-room).
 
 `hasSchedule(template)` is what decides whether the app asks at all — true when
-the caps graduate or a before-cutoff schedule exists. A firm added later with
+anything graduates (caps, goals or consistency rules) or a before-cutoff
+schedule exists. A firm added later with
 either gets the walkthrough screen and the dashboard controls for free.
 
 Sourced from [Builder Plan 25k](https://help.myfundedfutures.com/en/articles/15862870-builder-plan-25k-a-comprehensive-guide),
+[Lightning Funded: Account Payout
+Policy](https://help.tradeify.co/en/articles/10495932-lightning-funded-account-payout-policy),
+[Lightning Funded
+Accounts](https://help.tradeify.co/en/articles/10495938-lightning-funded-accounts),
 [Growth Funded: Account Payout
 Policy](https://help.tradeify.co/en/articles/11083796-growth-funded-account-payout-policy),
 [Growth Evaluation
@@ -417,7 +435,9 @@ in `src/lib/utils.ts`. If the CLI installs `cn` into `package.json`, remove it.
 
 ## Tests
 
-- `src/lib/calc.test.ts`: the port reproduces every cached formula result in
+- `src/lib/calc.test.ts`: a profit goal takes over from the balance shortfall
+  where it is larger, and leaves accounts without one untouched. The port
+  reproduces every cached formula result in
   the workbook (`E3=500`, `H3=718`, `I3=711.4`, `J3=2`, `K3=355.7`) from its
   saved inputs, plus the branch and edge cases above. The aggressive plan is
   checked across a sweep of balances, drawdowns, largest days, and consistency

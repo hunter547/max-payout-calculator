@@ -13,17 +13,19 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
   accountFor,
   accountLabel,
-  accountsFor,
   accountTemplate,
   defaultBuffer,
   firm,
   firmOf,
   FIRMS,
+  graduates,
   payoutCap,
   payoutThreshold,
+  profitGoal,
   program,
   programsFor,
   sizesFor,
+  type AccountProgram,
 } from '@/lib/accounts'
 import {
   calculate,
@@ -135,6 +137,14 @@ const STRATEGIES: {
       'Choose how many trading days you want, or the most you want to make in a day. The plan works out the rest.'
   }
 ]
+
+/** "Growth: 4 sizes, 25k to 150k" — one line per type on a firm's card. */
+function typeLine(program: AccountProgram): string {
+  const sizes = sizesFor(program.id)
+  return sizes.length === 1
+    ? `${program.name}: one size, ${sizes[0].name}`
+    : `${program.name}: ${sizes.length} sizes, ${sizes[0].name} to ${sizes[sizes.length - 1].name}`
+}
 
 function planText(plan: Plan): string {
   return `${plan.days} ${plan.days === 1 ? 'day' : 'days'} at ${formatCurrency(plan.dailyProfit)}`
@@ -485,29 +495,17 @@ export function Walkthrough({
           aria-label="Prop firm"
           className="grid gap-4 sm:grid-cols-2"
         >
-          {FIRMS.map((f) => {
-            const types = programsFor(f.id)
-            const accounts = accountsFor(f.id)
-            return (
-              <ChoiceCard
-                key={f.id}
-                id={`firm-${f.id}`}
-                value={f.id}
-                title={f.name}
-                logo={<FirmLogo firmId={f.id} size="md" />}
-              >
-                <Bullets
-                  items={[
-                    `${types.map((p) => p.name).join(', ')} ${types.length === 1 ? 'accounts' : 'account types'}`,
-                    accounts.length === 1
-                      ? `One size: ${accounts[0].name}`
-                      : `${accounts.length} sizes, ${accounts[0].name} to ${accounts[accounts.length - 1].name}`,
-                    `${formatPercent(accounts[0].consistency)} consistency rule`,
-                  ]}
-                />
-              </ChoiceCard>
-            )
-          })}
+          {FIRMS.map((f) => (
+            <ChoiceCard
+              key={f.id}
+              id={`firm-${f.id}`}
+              value={f.id}
+              title={f.name}
+              logo={<FirmLogo firmId={f.id} size="md" />}
+            >
+              <Bullets items={programsFor(f.id).map(typeLine)} />
+            </ChoiceCard>
+          ))}
         </RadioGroup>
       )
       break
@@ -522,7 +520,8 @@ export function Walkthrough({
           {programsFor(draft.firmId).map((p) => {
             const sizes = sizesFor(p.id)
             const days = sizes[0].minTradingDays
-            const graduated = sizes.some((t) => t.payout.caps.length > 1)
+            const graduated = sizes.some((t) => graduates(t.payout))
+            const rules = sizes[0].payout.consistencies
             return (
               <ChoiceCard
                 key={p.id}
@@ -535,10 +534,14 @@ export function Walkthrough({
                     sizes.length === 1
                       ? `One size: ${sizes[0].name}`
                       : `${sizes.length} sizes: ${sizes.map((s) => s.name).join(', ')}`,
-                    `${formatPercent(sizes[0].consistency)} consistency rule`,
-                    sizes[0].qualifyingDayProfit > 0
-                      ? `${days} trading ${days === 1 ? 'day' : 'days'} minimum, each over a set profit`
-                      : `${days} trading ${days === 1 ? 'day' : 'days'} minimum`,
+                    rules && rules.length > 1
+                      ? `${formatPercent(rules[0])} consistency rule, rising to ${formatPercent(rules[rules.length - 1])}`
+                      : `${formatPercent(sizes[0].consistency)} consistency rule`,
+                    days === 0
+                      ? 'No minimum trading days'
+                      : sizes[0].qualifyingDayProfit > 0
+                        ? `${days} trading ${days === 1 ? 'day' : 'days'} minimum, each over a set profit`
+                        : `${days} trading ${days === 1 ? 'day' : 'days'} minimum`,
                     graduated
                       ? 'Payouts capped by how many you have taken'
                       : `${formatRule(sizes[0].payout.caps[0])} max payout per request`,
@@ -570,7 +573,14 @@ export function Walkthrough({
                   `Balance starts at ${formatRule(template.startingBalance)}`,
                   // The first payout's terms; the next screen asks which one
                   // the trader is actually on.
-                  `${formatRule(payoutThreshold(template.payout, 0))} balance for a ${formatRule(payoutCap(template.payout, 0))} first payout`,
+                  ...(profitGoal(template.payout, 0) > 0
+                    ? [
+                        `First payout unlocks at ${formatRule(profitGoal(template.payout, 0))} of profit`,
+                        `Up to ${formatRule(payoutCap(template.payout, 0))} per request`,
+                      ]
+                    : [
+                        `${formatRule(payoutThreshold(template.payout, 0))} balance for a ${formatRule(payoutCap(template.payout, 0))} first payout`,
+                      ]),
                   `${formatRule(template.payout.minimumPayout)} minimum payout`,
                   ...(template.qualifyingDayProfit > 0
                     ? [
