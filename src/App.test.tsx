@@ -2,6 +2,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { BRAND_THEMES } from '@/lib/themes'
 import App from './App'
 
 declare global {
@@ -510,6 +511,20 @@ describe('color themes', () => {
       JSON.parse(window.localStorage.getItem('mpc.appearance')!),
     ).toEqual({ brand: 'mffu', scheme: 'dark' })
   })
+
+  // Every registered theme, so a new firm is covered as soon as it's added.
+  it.each(BRAND_THEMES.map((t) => [t.name, t] as const))(
+    '%s applies to the whole app in its own modes',
+    (_, theme) => {
+      seedDashboard()
+      seed({ 'mpc.theme': 'light', 'mpc.brand': theme.id })
+      render()
+
+      expect(root.dataset.brand).toBe(theme.id)
+      expect(root.classList.contains('dark')).toBe(!theme.schemes.includes('light'))
+      expect(modeToggle() !== null).toBe(theme.schemes.length > 1)
+    },
+  )
 
   it('is available from the first walkthrough screen', () => {
     seed({ 'mpc.brand': 'mffu' })

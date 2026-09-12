@@ -31,6 +31,12 @@ export const BRAND_THEMES: readonly BrandTheme[] = [
     schemes: ['dark'],
     swatches: ['#02040e', '#3a82f7', '#d8ae5e'],
   },
+  {
+    id: 'tradeify',
+    name: 'Tradeify',
+    schemes: ['dark'],
+    swatches: ['#08080a', '#00ff51', '#efa22b'],
+  },
 ]
 
 export const DEFAULT_BRAND = 'default'

@@ -41,7 +41,11 @@ it('lists every theme and reports the one picked', () => {
     document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]'),
   )
 
-  expect(items.map((el) => el.textContent)).toEqual(['Default', 'MyFundedFutures'])
+  expect(items.map((el) => el.textContent)).toEqual([
+    'Default',
+    'MyFundedFutures',
+    'Tradeify',
+  ])
   expect(items[0].getAttribute('aria-checked')).toBe('true')
 
   act(() => items[1].click())

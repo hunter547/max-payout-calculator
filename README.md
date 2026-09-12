@@ -214,6 +214,7 @@ included.
 |-------|-------|--------|
 | Default | light and dark | the app's own palette |
 | MyFundedFutures | dark only | colors and typeface (Lexend) from myfundedfutures.com |
+| Tradeify | dark only | colors and typeface (Mona Sans) from tradeify.co |
 
 A dark-only theme hides the light/dark toggle; the trader's light/dark
 preference is kept and comes back with a theme that has both.

@@ -2,8 +2,9 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/archivo/wdth.css";
-/* Only downloaded when a theme uses it (MyFundedFutures). */
+/* Firm typefaces: each only downloads while its theme is in use. */
 @import "@fontsource-variable/lexend/index.css";
+@import "@fontsource-variable/mona-sans/wdth.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -188,6 +189,50 @@
   --cap: #d8ae5e;
   --grid: #172136;
   --axis: #33425e;
+}
+
+/*
+  Theme: Tradeify. Dark only, from tradeify.co.
+    Night  #08080A  page
+    Panel  #111114  chart plate, cards
+    Money  #00FF51  actions, with their dark ink #051A10 on top
+    Gold   #EFA22B  the daily cap line
+    Blue   #4F7BF0  planned days
+    Sand   #B8B1AE  secondary text (their warm grays)
+  Type: Mona Sans, the site's typeface. Its width axis (75-125%) keeps the
+  expanded headings and condensed figures working as in the default theme.
+  Money green is the brand, but green already means profit in the chart, so
+  planned days take a validated blue and the cap takes their gold.
+*/
+:root[data-brand='tradeify'] {
+  color-scheme: dark;
+  --font-sans: "Mona Sans Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --background: #08080a;
+  --foreground: #f0edec;
+  --card: #111114;
+  --card-foreground: #f0edec;
+  --popover: #18181a;
+  --popover-foreground: #f0edec;
+  --primary: #00ff51;
+  --primary-foreground: #051a10;
+  --secondary: #18181a;
+  --secondary-foreground: #f0edec;
+  --muted: #18181a;
+  --muted-foreground: #b8b1ae;
+  --accent: #1f1f22;
+  --accent-foreground: #f0edec;
+  --destructive: #d2463c;
+  --border: #242427;
+  --input: #2c2c30;
+  --ring: #00ff51;
+
+  --profit: #2daa80;
+  --loss: #d2463c;
+  --plan: #4f7bf0;
+  --cap: #efa22b;
+  --grid: #1c1c20;
+  --axis: #3a3a40;
 }
 
 /* Archivo's width axis is the type system: expanded for headings, condensed
