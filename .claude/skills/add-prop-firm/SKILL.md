@@ -233,6 +233,9 @@ plan's numbers against the firm's rules by hand at least once per program.
 
 Then:
 
+- **The link preview card.** `public/og-image.png` shows every firm's icon and
+  names how many there are, so a new firm makes it stale. Regenerate it from
+  [`tools/og-card/`](../../../tools/og-card/README.md).
 - **README.** Add the account rows to the table in "Account templates", the
   theme row in "Themes", and a paragraph on any rule shape that is new. Say
   what you deliberately did not model and why (Apex's tiered payout split is
@@ -251,6 +254,7 @@ src/assets/brands/firm.svg         lockup
 src/assets/brands/firm-icon.svg    square mark
 src/lib/accounts.ts                FIRMS, ACCOUNT_PROGRAMS, ACCOUNT_TEMPLATES
 src/lib/accounts.test.ts           the firm's published tables
+public/og-image.png                the card, regenerated from tools/og-card/
 README.md                          account rows, theme row, new rule shapes
 ```
 

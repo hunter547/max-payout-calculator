@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: 'Archivo Variable';
+        font-style: normal;
+        font-weight: 100 900;
+        font-stretch: 62% 125%;
+        src: url(../../node_modules/@fontsource-variable/archivo/files/archivo-latin-wdth-normal.woff2) format('woff2-variations');
+      }
+
+      /* The app's own default palette. */
+      :root {
+        --fog: #e9edf0;
+        --sheet: #f7f9fa;
+        --graphite: #18212b;
+        --slate: #56636f;
+        --cobalt: #2f4bd8;
+        --jade: #177e5b;
+        --line: #d3dae0;
+      }
+
+      * { box-sizing: border-box; margin: 0; }
+
+      body {
+        width: 1200px;
+        height: 630px;
+        background: var(--fog);
+        font-family: 'Archivo Variable', system-ui, sans-serif;
+        color: var(--graphite);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 58px 72px 52px;
+        overflow: hidden;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .brand img { width: 44px; height: 44px; border-radius: 10px; display: block; }
+      .brand b {
+        font-stretch: 112%;
+        font-weight: 700;
+        font-size: 26px;
+        letter-spacing: -0.01em;
+      }
+
+      h1 {
+        margin-top: 34px;
+        font-stretch: 116%;
+        font-weight: 800;
+        font-size: 88px;
+        line-height: 0.95;
+        letter-spacing: -0.028em;
+        max-width: 16ch;
+      }
+      h1 em {
+        font-style: normal;
+        color: var(--cobalt);
+      }
+
+      .lede {
+        margin-top: 26px;
+        font-size: 26px;
+        line-height: 1.35;
+        color: var(--slate);
+        max-width: 40ch;
+      }
+
+      .firms {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      /* Three of the marks carry their own ground and cover the tile; the
+         other two are bare art, so the tile is what they sit on — the same
+         dark plate the app puts them on in light mode. */
+      .firms .tile {
+        width: 76px;
+        height: 76px;
+        border-radius: 18px;
+        background: #0b0d14;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        box-shadow: 0 1px 0 rgba(24, 33, 43, 0.12), 0 8px 20px rgba(24, 33, 43, 0.1);
+      }
+      .firms .tile img { width: 76px; height: 76px; display: block; }
+      .firms .tile.inset img { width: 58px; height: 58px; }
+      .firms .rule {
+        width: 1px;
+        height: 52px;
+        background: var(--line);
+        margin: 0 8px;
+      }
+      .firms .count {
+        font-size: 23px;
+        line-height: 1.25;
+        color: var(--slate);
+        max-width: 17ch;
+      }
+      .firms .count b {
+        display: block;
+        color: var(--graphite);
+        font-weight: 700;
+        font-stretch: 108%;
+        font-size: 25px;
+      }
+
+      footer {
+        font-size: 17px;
+        color: var(--slate);
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+      .note { max-width: 62ch; }
+    </style>
+  </head>
+  <body>
+    <div>
+      <div class="brand">
+        <img src="../../public/favicon.svg" alt="" />
+        <b>Max payout calculator</b>
+      </div>
+
+      <h1>How many days to your <em>max payout</em>?</h1>
+      <p class="lede">
+        Your firm's own payout rules, worked out to the day and the dollar.
+      </p>
+    </div>
+
+    <div class="firms">
+      <span class="tile inset"><img src="../../src/assets/brands/mffu-icon.svg" alt="" /></span>
+      <span class="tile"><img src="../../src/assets/brands/tradeify-icon.svg" alt="" /></span>
+      <span class="tile"><img src="../../src/assets/brands/topstep-icon.svg" alt="" /></span>
+      <span class="tile"><img src="../../src/assets/brands/lucid-icon.svg" alt="" /></span>
+      <span class="tile"><img src="../../src/assets/brands/apex-icon.svg" alt="" /></span>
+      <div class="rule"></div>
+      <div class="count">
+        <b>Five firms</b>
+        every size, schedule and consistency rule
+      </div>
+    </div>
+
+    <footer>
+      <span class="note">Not affiliated with or endorsed by the firms shown.</span>
+      <span>Saved in your browser. Nothing sent anywhere.</span>
+    </footer>
+  </body>
+</html>
