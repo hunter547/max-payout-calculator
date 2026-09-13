@@ -10,6 +10,8 @@
  * afterwards; a template is a starting point.
  */
 
+import apexIcon from '@/assets/brands/apex-icon.svg'
+import apexLogo from '@/assets/brands/apex.svg'
 import lucidIcon from '@/assets/brands/lucid-icon.svg'
 import lucidLogo from '@/assets/brands/lucid.svg'
 import mffuIcon from '@/assets/brands/mffu-icon.svg'
@@ -73,6 +75,13 @@ export const FIRMS: readonly Firm[] = [
     logo: { src: lucidLogo, alt: 'Lucid Trading logo', scale: 1.6 },
     icon: lucidIcon,
   },
+  {
+    id: 'apex',
+    name: 'Apex Trader Funding',
+    themeId: 'apex',
+    logo: { src: apexLogo, alt: 'Apex Trader Funding logo' },
+    icon: apexIcon,
+  },
 ]
 
 /** An account type, e.g. a MyFundedFutures Builder or a Tradeify Growth. */
@@ -122,6 +131,9 @@ export const ACCOUNT_PROGRAMS: readonly AccountProgram[] = [
   },
   { id: 'lucid-pro', firmId: 'lucid', name: 'Pro' },
   { id: 'lucid-direct', firmId: 'lucid', name: 'Direct' },
+  { id: 'apex-eod', firmId: 'apex', name: 'EOD Drawdown' },
+  { id: 'apex-intraday', firmId: 'apex', name: 'Intraday Drawdown' },
+  { id: 'apex-legacy', firmId: 'apex', name: 'Legacy' },
   {
     id: 'topstep-xfa-consistency',
     firmId: 'topstep',
@@ -145,7 +157,11 @@ export const ACCOUNT_PROGRAMS: readonly AccountProgram[] = [
  * whichever is higher.
  */
 export interface PayoutSchedule {
-  /** Max withdrawal per request, by payout number. The last entry repeats. */
+  /**
+   * Max withdrawal per request, by payout number. The last entry repeats.
+   * `Infinity` where the firm stops capping, as Apex's legacy accounts do
+   * from the sixth payout: the balance above the floor is then the only limit.
+   */
   caps: readonly number[]
   /**
    * Profit to earn since the last payout before one can be requested, by
@@ -175,12 +191,25 @@ export interface PayoutSchedule {
    */
   floor?: number
   /**
+   * The floor by payout number, where a firm lets it go partway through: Apex
+   * holds its safety net for three payouts and drops it after. The last entry
+   * holds from there on, and this wins over `floor` where both are set.
+   */
+  floors?: readonly number[]
+  /**
    * Whether the floor fails the account rather than merely being held back.
    * A trailing drawdown breaches at or below its level, so a payout has to
    * leave a buffer above it, not land on it; MyFundedFutures fixes its own
    * buffer at $2,100 and the floor is simply withheld.
    */
   floorBreaches?: boolean
+  /**
+   * The payout number from which the floor becomes the account's breach
+   * level. Apex's legacy accounts drop the safety net after three payouts,
+   * leaving the trailing drawdown itself underneath, which a payout must not
+   * land on. Absent where `floorBreaches` settles it for every payout.
+   */
+  floorBreachesFrom?: number
 }
 
 /** Which of an account type's two sets of terms this account is on. */
@@ -207,6 +236,17 @@ export interface AccountTemplate {
    * the firm counts every day traded, win or lose.
    */
   qualifyingDayProfit: number
+  /**
+   * Whether a day landing exactly on that figure counts. Tradeify asks for
+   * more than it; Apex asks for it "or more".
+   */
+  qualifyingDayInclusive?: boolean
+  /**
+   * Days over the bar the firm needs, where that is fewer than the days it
+   * needs in total: Apex's legacy accounts want eight days, five of them over
+   * $50. Absent where every day the firm counts has to clear the bar.
+   */
+  minQualifyingDays?: number
   /**
    * The account's trailing max drawdown, where the firm publishes one. Used
    * to judge whether the room a payout leaves is thin: it is what the account
@@ -685,6 +725,281 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
       minimumPayout: 500,
     },
   },
+  /*
+    Apex Trader Funding. Three programs, all Performance Accounts: the EOD and
+    Intraday drawdown accounts that replaced the old lineup, and the Legacy
+    accounts, which Apex has put back on sale and which keep their own older
+    rules. Figures from their help center's EOD Payouts, Intraday Trailing
+    Drawdown Payouts and Legacy PA Payout Parameters pages.
+
+    All three want qualifying days: five days at a per-size figure for the new
+    accounts, and for Legacy eight days in all with five of them over $50.
+    Apex counts a day that lands exactly on the figure, unlike Tradeify.
+
+    A PA closes after its sixth payout. Legacy stops capping there instead,
+    and its 30% consistency lapses at the same point. Apex does not say
+    whether its published minimum balance lapses along with the safety net
+    after three payouts, so it is kept: asking for too much balance only
+    delays a payout, where asking too little invites a denial.
+  */
+  {
+    // The 25k caps every payout at $1,000, so one entry covers all six.
+    id: 'apex-25k-eod',
+    programId: 'apex-eod',
+    name: '25k',
+    startingBalance: 25000,
+    consistency: 0.5,
+    minTradingDays: 5,
+    qualifyingDayProfit: 100,
+    qualifyingDayInclusive: true,
+    drawdown: 1000,
+    payout: {
+      caps: [1000],
+      minimumPayout: 500,
+      qualifyingBalance: 26600,
+      floor: 26100,
+    },
+  },
+  {
+    id: 'apex-50k-eod',
+    programId: 'apex-eod',
+    name: '50k',
+    startingBalance: 50000,
+    consistency: 0.5,
+    minTradingDays: 5,
+    qualifyingDayProfit: 250,
+    qualifyingDayInclusive: true,
+    drawdown: 2000,
+    payout: {
+      caps: [1500, 1500, 2000, 2500, 2500, 3000],
+      minimumPayout: 500,
+      qualifyingBalance: 52600,
+      floor: 52100,
+    },
+  },
+  {
+    id: 'apex-100k-eod',
+    programId: 'apex-eod',
+    name: '100k',
+    startingBalance: 100000,
+    consistency: 0.5,
+    minTradingDays: 5,
+    qualifyingDayProfit: 300,
+    qualifyingDayInclusive: true,
+    drawdown: 3000,
+    payout: {
+      caps: [2000, 2500, 2500, 3000, 4000, 4000],
+      minimumPayout: 500,
+      qualifyingBalance: 103600,
+      floor: 103100,
+    },
+  },
+  {
+    id: 'apex-150k-eod',
+    programId: 'apex-eod',
+    name: '150k',
+    startingBalance: 150000,
+    consistency: 0.5,
+    minTradingDays: 5,
+    qualifyingDayProfit: 350,
+    qualifyingDayInclusive: true,
+    drawdown: 4000,
+    payout: {
+      caps: [2500, 3000, 3000, 3000, 4000, 5000],
+      minimumPayout: 500,
+      qualifyingBalance: 154600,
+      floor: 154100,
+    },
+  },
+  {
+    id: 'apex-25k-intraday',
+    programId: 'apex-intraday',
+    name: '25k',
+    startingBalance: 25000,
+    consistency: 0.5,
+    minTradingDays: 5,
+    qualifyingDayProfit: 100,
+    qualifyingDayInclusive: true,
+    drawdown: 1000,
+    payout: {
+      caps: [1000],
+      minimumPayout: 500,
+      qualifyingBalance: 26600,
+      floor: 26100,
+    },
+  },
+  {
+    id: 'apex-50k-intraday',
+    programId: 'apex-intraday',
+    name: '50k',
+    startingBalance: 50000,
+    consistency: 0.5,
+    minTradingDays: 5,
+    qualifyingDayProfit: 200,
+    qualifyingDayInclusive: true,
+    drawdown: 2000,
+    payout: {
+      caps: [1500, 2000, 2500, 2500, 3000, 3000],
+      minimumPayout: 500,
+      qualifyingBalance: 52600,
+      floor: 52100,
+    },
+  },
+  {
+    id: 'apex-100k-intraday',
+    programId: 'apex-intraday',
+    name: '100k',
+    startingBalance: 100000,
+    consistency: 0.5,
+    minTradingDays: 5,
+    qualifyingDayProfit: 250,
+    qualifyingDayInclusive: true,
+    drawdown: 3000,
+    payout: {
+      caps: [2000, 2500, 3000, 3000, 4000, 4000],
+      minimumPayout: 500,
+      qualifyingBalance: 103600,
+      floor: 103100,
+    },
+  },
+  {
+    id: 'apex-150k-intraday',
+    programId: 'apex-intraday',
+    name: '150k',
+    startingBalance: 150000,
+    consistency: 0.5,
+    minTradingDays: 5,
+    qualifyingDayProfit: 300,
+    qualifyingDayInclusive: true,
+    drawdown: 4000,
+    payout: {
+      caps: [2500, 3000, 3000, 4000, 4000, 5000],
+      minimumPayout: 500,
+      qualifyingBalance: 154600,
+      floor: 154100,
+    },
+  },
+  {
+    // Apex's own minimum to request is the safety net itself: a payout may take $500 out of it, which is why the floor sits $500 below.
+    id: 'apex-25k-legacy',
+    programId: 'apex-legacy',
+    name: '25k',
+    startingBalance: 25000,
+    consistency: 0.3,
+    minTradingDays: 8,
+    qualifyingDayProfit: 50,
+    qualifyingDayInclusive: true,
+    minQualifyingDays: 5,
+    drawdown: 1500,
+    payout: {
+      caps: [1500, 1500, 1500, 1500, 1500, Infinity],
+      consistencies: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 1],
+      minimumPayout: 500,
+      qualifyingBalance: 26600,
+      floors: [26100, 26100, 26100, 25100],
+      floorBreachesFrom: 4,
+    },
+  },
+  {
+    id: 'apex-50k-legacy',
+    programId: 'apex-legacy',
+    name: '50k',
+    startingBalance: 50000,
+    consistency: 0.3,
+    minTradingDays: 8,
+    qualifyingDayProfit: 50,
+    qualifyingDayInclusive: true,
+    minQualifyingDays: 5,
+    drawdown: 2500,
+    payout: {
+      caps: [2000, 2000, 2000, 2000, 2000, Infinity],
+      consistencies: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 1],
+      minimumPayout: 500,
+      qualifyingBalance: 52600,
+      floors: [52100, 52100, 52100, 50100],
+      floorBreachesFrom: 4,
+    },
+  },
+  {
+    id: 'apex-100k-legacy',
+    programId: 'apex-legacy',
+    name: '100k',
+    startingBalance: 100000,
+    consistency: 0.3,
+    minTradingDays: 8,
+    qualifyingDayProfit: 50,
+    qualifyingDayInclusive: true,
+    minQualifyingDays: 5,
+    drawdown: 3000,
+    payout: {
+      caps: [2500, 2500, 2500, 2500, 2500, Infinity],
+      consistencies: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 1],
+      minimumPayout: 500,
+      qualifyingBalance: 103100,
+      floors: [102600, 102600, 102600, 100100],
+      floorBreachesFrom: 4,
+    },
+  },
+  {
+    id: 'apex-150k-legacy',
+    programId: 'apex-legacy',
+    name: '150k',
+    startingBalance: 150000,
+    consistency: 0.3,
+    minTradingDays: 8,
+    qualifyingDayProfit: 50,
+    qualifyingDayInclusive: true,
+    minQualifyingDays: 5,
+    drawdown: 5000,
+    payout: {
+      caps: [2750, 2750, 2750, 2750, 2750, Infinity],
+      consistencies: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 1],
+      minimumPayout: 500,
+      qualifyingBalance: 155100,
+      floors: [154600, 154600, 154600, 150100],
+      floorBreachesFrom: 4,
+    },
+  },
+  {
+    id: 'apex-250k-legacy',
+    programId: 'apex-legacy',
+    name: '250k',
+    startingBalance: 250000,
+    consistency: 0.3,
+    minTradingDays: 8,
+    qualifyingDayProfit: 50,
+    qualifyingDayInclusive: true,
+    minQualifyingDays: 5,
+    drawdown: 6500,
+    payout: {
+      caps: [3000, 3000, 3000, 3000, 3000, Infinity],
+      consistencies: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 1],
+      minimumPayout: 500,
+      qualifyingBalance: 256600,
+      floors: [256100, 256100, 256100, 250100],
+      floorBreachesFrom: 4,
+    },
+  },
+  {
+    id: 'apex-300k-legacy',
+    programId: 'apex-legacy',
+    name: '300k',
+    startingBalance: 300000,
+    consistency: 0.3,
+    minTradingDays: 8,
+    qualifyingDayProfit: 50,
+    qualifyingDayInclusive: true,
+    minQualifyingDays: 5,
+    drawdown: 7500,
+    payout: {
+      caps: [3500, 3500, 3500, 3500, 3500, Infinity],
+      consistencies: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 1],
+      minimumPayout: 500,
+      qualifyingBalance: 307600,
+      floors: [307100, 307100, 307100, 300100],
+      floorBreachesFrom: 4,
+    },
+  },
 ]
 
 /**
@@ -803,6 +1118,13 @@ function byPayout(steps: readonly number[], payoutsSoFar: number): number {
   return steps[Math.min(n, steps.length) - 1]
 }
 
+/** What has to remain after a payout, at that payout number. */
+export function floorAt(schedule: PayoutSchedule, payoutsSoFar: number): number {
+  return schedule.floors
+    ? byPayout(schedule.floors, payoutsSoFar)
+    : (schedule.floor ?? 0)
+}
+
 /** The most one request may withdraw, at that payout number. */
 export function payoutCap(schedule: PayoutSchedule, payoutsSoFar: number): number {
   return byPayout(schedule.caps, payoutsSoFar)
@@ -843,13 +1165,35 @@ export function maxPayoutFor(
   schedule: PayoutSchedule,
   payoutsSoFar: number,
   balance: number,
+  buffer = DEFAULT_PAYOUT_BUFFER,
 ): number {
+  // A capped payout is the firm's own number and stands as it is; the warning
+  // then says what taking it would leave. Uncapped, there is no number to
+  // stand on, so the app will not call "everything down to a floor that fails
+  // the account" the maximum: the buffer stays behind.
+  const cap = payoutCap(schedule, payoutsSoFar)
+  const keep =
+    !Number.isFinite(cap) && floorBreachesAt(schedule, payoutsSoFar)
+      ? Math.max(0, buffer)
+      : 0
   const limits = [
-    payoutCap(schedule, payoutsSoFar),
-    balance - (schedule.floor ?? 0),
+    cap,
+    balance - floorAt(schedule, payoutsSoFar) - keep,
     ...(schedule.withdrawShare ? [balance * schedule.withdrawShare] : []),
   ]
   return Math.max(0, Math.round(Math.min(...limits) * 100) / 100)
+}
+
+/** Whether the floor at that payout number is one that fails the account. */
+export function floorBreachesAt(
+  schedule: PayoutSchedule,
+  payoutsSoFar: number,
+): boolean {
+  if (schedule.floorBreaches) return true
+  return (
+    schedule.floorBreachesFrom !== undefined &&
+    nextPayoutNumber(payoutsSoFar) >= schedule.floorBreachesFrom
+  )
 }
 
 /** How much room a payout of that size leaves above a breaching floor. */
@@ -857,9 +1201,14 @@ export function drawdownRoomAt(
   schedule: PayoutSchedule,
   payoutsSoFar: number,
   balance: number,
+  buffer = DEFAULT_PAYOUT_BUFFER,
 ): number | null {
-  if (!schedule.floorBreaches) return null
-  return balance - payoutCap(schedule, payoutsSoFar) - (schedule.floor ?? 0)
+  if (!floorBreachesAt(schedule, payoutsSoFar)) return null
+  return (
+    balance -
+    maxPayoutFor(schedule, payoutsSoFar, balance, buffer) -
+    floorAt(schedule, payoutsSoFar)
+  )
 }
 
 /**
@@ -877,18 +1226,21 @@ export function payoutThreshold(
 ): number {
   const cap = payoutCap(schedule, payoutsSoFar)
   const qualifying = schedule.qualifyingBalance ?? 0
-  const floor = schedule.floor ?? 0
+  const floor = floorAt(schedule, payoutsSoFar)
+  // An uncapped payout has no maximum to reach for, so the balance it wants is
+  // whatever lets the smallest request through; everything above is upside.
+  const take = Number.isFinite(cap) ? cap : schedule.minimumPayout
   // Nothing held back, nothing to qualify at and no share of the balance: the
   // firm gates on profit alone, so there is no balance to reach. Zero says so,
   // and the profit goal is then what the target answers to.
   if (!qualifying && !floor && !schedule.withdrawShare) return 0
 
-  const keep = schedule.floorBreaches ? Math.max(0, buffer) : 0
+  const keep = floorBreachesAt(schedule, payoutsSoFar) ? Math.max(0, buffer) : 0
   return Math.max(
     qualifying,
-    floor + cap + keep,
+    floor + take + keep,
     // Half the balance has to cover the cap, so the balance is twice it.
-    schedule.withdrawShare ? cap / schedule.withdrawShare : 0,
+    schedule.withdrawShare ? take / schedule.withdrawShare : 0,
   )
 }
 

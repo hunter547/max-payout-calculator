@@ -42,6 +42,21 @@ describe('summarize — qualifying days', () => {
     expect(dayQualifies(150.01, 150)).toBe(true)
     expect(dayQualifies(-5, 0)).toBe(true)
   })
+
+  it('counts a day on the bar where the firm words it that way', () => {
+    // Apex asks for its figure "or more", so the day that Tradeify's "more
+    // than" turns away is one of Apex's.
+    expect(dayQualifies(100, 100, true)).toBe(true)
+    expect(dayQualifies(99.99, 100, true)).toBe(false)
+
+    const days = [
+      { id: 'a', date: '2026-09-08', amount: '100' },
+      { id: 'b', date: '2026-09-09', amount: '250' },
+      { id: 'c', date: '2026-09-10', amount: '99.99' },
+    ]
+    expect(summarize(days, 100).qualifyingDays).toBe(1)
+    expect(summarize(days, 100, true).qualifyingDays).toBe(2)
+  })
 })
 
 describe('summarize', () => {

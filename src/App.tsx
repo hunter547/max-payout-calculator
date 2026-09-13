@@ -47,7 +47,12 @@ import {
   type Plan,
   type Strategy,
 } from '@/lib/calc'
-import { countWord, formatCurrency, MAX_SPELLED_COUNT } from '@/lib/format'
+import {
+  countWord,
+  formatCurrency,
+  MAX_SPELLED_COUNT,
+  qualifyingBar,
+} from '@/lib/format'
 import {
   newId,
   nextTradingDate,
@@ -128,6 +133,7 @@ function verdict(
   curated: CuratedDraft,
   firm: string,
   qualifyingDayProfit: number,
+  inclusiveBar: boolean,
 ) {
   if (consistencyInvalid) {
     return {
@@ -152,7 +158,7 @@ function verdict(
     if (belowBar) {
       return {
         title: 'Raise your daily cap',
-        detail: `A day has to make more than ${formatCurrency(qualifyingDayProfit)} to count towards the ${results.eligibilityDaysLeft} trading ${results.eligibilityDaysLeft === 1 ? 'day' : 'days'} ${firm} still needs, so a cap below that never gets there.`,
+        detail: `A day has to make ${qualifyingBar(qualifyingDayProfit, inclusiveBar)} to count towards the ${results.eligibilityDaysLeft} trading ${results.eligibilityDaysLeft === 1 ? 'day' : 'days'} ${firm} still needs, so a cap below that never gets there.`,
       }
     }
     return {
@@ -176,7 +182,9 @@ function verdict(
     const bar = qualifyingDayProfit > 0 ? formatCurrency(qualifyingDayProfit) : null
     const dayWords = days === 1 ? 'One more trading day' : `${countWord(days)} more trading days`
     return {
-      title: bar ? `${dayWords} over ${bar}` : `${dayWords} to qualify`,
+      title: bar
+        ? `${dayWords} ${inclusiveBar ? 'at' : 'over'} ${bar}`
+        : `${dayWords} to qualify`,
       detail: `Net profit of ${formatCurrency(netProfit)} already clears the ${formatCurrency(results.minimumNetProfitRequired)} required. ${firm} needs ${results.eligibilityDaysLeft} more trading ${results.eligibilityDaysLeft === 1 ? 'day' : 'days'} before it will pay out, ${
         bar
           ? 'and a day has to beat that to be one of them'
@@ -350,9 +358,12 @@ export default function App() {
   // Which logged days count is the firm's call, so the ledger is summarised
   // against its bar.
   const qualifyingDayProfit = parseAmount(account.qualifyingDayProfit)
+  // Whether a day that lands exactly on the bar counts is the firm's wording,
+  // not a rule the trader edits, so it comes from the template.
+  const inclusiveBar = template.qualifyingDayInclusive ?? false
   const summary = useMemo(
-    () => summarize(sorted, qualifyingDayProfit),
-    [sorted, qualifyingDayProfit],
+    () => summarize(sorted, qualifyingDayProfit, inclusiveBar),
+    [sorted, qualifyingDayProfit, inclusiveBar],
   )
 
   const inputs = useMemo(
@@ -368,8 +379,12 @@ export default function App() {
         },
         summary,
         account,
+        {
+          qualifyingDayInclusive: template.qualifyingDayInclusive,
+          minQualifyingDays: template.minQualifyingDays,
+        },
       ),
-    [approach, payoutTaken, account, snapshot, summary],
+    [approach, payoutTaken, account, snapshot, summary, template],
   )
   const consistency = inputs.consistencyRequirement
   const consistencyInvalid = consistency <= 0
@@ -651,6 +666,7 @@ export default function App() {
     curated,
     firmOf(template).name,
     qualifyingDayProfit,
+    inclusiveBar,
   )
 
   const balanceDisplay: BalanceDisplay = balanceEntered
@@ -810,6 +826,7 @@ export default function App() {
               <SnapshotPanel
                 snapshot={snapshot}
                 qualifyingDayProfit={qualifyingDayProfit}
+                inclusiveBar={inclusiveBar}
                 asksTradingDays={tradingDaysBind(
                   inputs.minTradingDays,
                   inputs.consistencyRequirement,

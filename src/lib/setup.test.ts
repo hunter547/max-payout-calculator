@@ -294,9 +294,13 @@ describe('deriveInputs', () => {
       currentNetProfit: 6.6,
       consistencyRequirement: 0.5,
       minTradingDays: 2,
+      // The firm's own day wording, which a Builder does not set.
+      qualifyingDayInclusive: undefined,
+      minQualifyingDays: undefined,
       // Two days at 50% is what the consistency rule takes anyway, so the
       // count is never asked for and never short.
       tradingDaysSoFar: 2,
+      qualifyingDaysSoFar: 2,
       qualifyingDayProfit: 0,
       profitGoal: 0,
     })

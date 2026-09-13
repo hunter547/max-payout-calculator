@@ -53,6 +53,15 @@ export interface CalcInputs {
    * profit without buying eligibility.
    */
   qualifyingDayProfit: number
+  /** Whether a day landing exactly on that bar counts towards the minimum. */
+  qualifyingDayInclusive?: boolean
+  /**
+   * Days over the bar the firm needs, where that is fewer than the days it
+   * needs in total, and how many of those are already behind you. Apex's
+   * legacy accounts want eight days, five of them over $50.
+   */
+  minQualifyingDays?: number
+  qualifyingDaysSoFar?: number
 }
 
 export interface CalcResults {
@@ -104,6 +113,9 @@ export function calculate(inputs: CalcInputs): CalcResults {
     minTradingDays,
     tradingDaysSoFar,
     qualifyingDayProfit,
+    qualifyingDayInclusive = false,
+    minQualifyingDays,
+    qualifyingDaysSoFar,
   } = inputs
 
   // E3 =MAX(minimum payout, threshold - balance), widened by the profit a
@@ -148,9 +160,14 @@ export function calculate(inputs: CalcInputs): CalcResults {
       ? remainingProfitNeeded / minimumTradingDaysLeft
       : 0
 
+  // Two counts where a firm keeps two: the days it wants in all, and the days
+  // over the bar among them. Whichever is further away sets the days left.
   const eligibilityDaysLeft = Math.max(
     0,
     Math.ceil(minTradingDays - tradingDaysSoFar),
+    minQualifyingDays !== undefined
+      ? Math.ceil(minQualifyingDays - (qualifyingDaysSoFar ?? tradingDaysSoFar))
+      : 0,
   )
 
   return {
@@ -166,7 +183,7 @@ export function calculate(inputs: CalcInputs): CalcResults {
     // just profit and can be any size.
     qualifyingDailyProfit:
       eligibilityDaysLeft > 0 && qualifyingDayProfit > 0
-        ? qualifyingDayProfit + QUALIFYING_STEP
+        ? qualifyingDayProfit + (qualifyingDayInclusive ? 0 : QUALIFYING_STEP)
         : 0,
     payoutReady: targetMet && eligibilityDaysLeft === 0,
     largestDayWithinConsistency:

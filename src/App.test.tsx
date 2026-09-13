@@ -214,6 +214,7 @@ describe('walkthrough', () => {
       'Tradeify logo',
       'Topstep logo',
       'Lucid Trading logo',
+      'Apex Trader Funding logo',
     ])
     // One line per account type the firm offers.
     expect(text()).toContain('Builder: 2 sizes, 25k to 50k')
@@ -222,6 +223,9 @@ describe('walkthrough', () => {
     expect(text()).toContain('XFA Consistency: 3 sizes, 50k to 150k')
     expect(text()).toContain('Pro: 4 sizes, 25k to 150k')
     expect(text()).toContain('Direct: 4 sizes, 25k to 150k')
+    expect(text()).toContain('EOD Drawdown: 4 sizes, 25k to 150k')
+    expect(text()).toContain('Intraday Drawdown: 4 sizes, 25k to 150k')
+    expect(text()).toContain('Legacy: 6 sizes, 25k to 300k')
   })
 
   it('asks for a firm before moving on', () => {

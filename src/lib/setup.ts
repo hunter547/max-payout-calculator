@@ -223,6 +223,11 @@ export function deriveInputs(
   },
   summary: LedgerSummary,
   account: Record<AccountKey, string>,
+  /** The firm's own wording of its day rules, which the trader cannot edit. */
+  dayRules: {
+    qualifyingDayInclusive?: boolean
+    minQualifyingDays?: number
+  } = {},
 ): CalcInputs {
   const pointInTime = source.approach === 'pointInTime'
   const startingBalance = parseAmount(account.startingBalance)
@@ -252,7 +257,19 @@ export function deriveInputs(
     // Point-in-time asks for the days that count; day-by-day works out which
     // of the logged days clear the firm's bar. Where the minimum is one the
     // consistency rule reaches anyway, it is never asked for and never short.
+    // Where a firm counts days twice over — so many in all, so many of them
+    // over its bar — the total is what the minimum answers to, and the days
+    // over the bar are counted separately below.
     tradingDaysSoFar: !pointInTime
+      ? dayRules.minQualifyingDays !== undefined
+        ? summary.tradingDays
+        : summary.qualifyingDays
+      : tradingDaysBind(minTradingDays, consistency)
+        ? Math.max(0, Math.round(parseAmount(source.tradingDays)))
+        : minTradingDays,
+    qualifyingDayInclusive: dayRules.qualifyingDayInclusive,
+    minQualifyingDays: dayRules.minQualifyingDays,
+    qualifyingDaysSoFar: !pointInTime
       ? summary.qualifyingDays
       : tradingDaysBind(minTradingDays, consistency)
         ? Math.max(0, Math.round(parseAmount(source.tradingDays)))

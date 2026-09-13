@@ -1,5 +1,5 @@
 import { MoneyField } from '@/components/MoneyField'
-import { formatRule } from '@/lib/format'
+import { qualifyingBar } from '@/lib/format'
 import { isAmount } from '@/lib/ledger'
 import { cn } from '@/lib/utils'
 import type { Snapshot } from '@/lib/setup'
@@ -9,6 +9,7 @@ interface SnapshotPanelProps {
   onSnapshotChange: (patch: Partial<Snapshot>) => void
   /** Profit a day must beat to count, where the firm sets one. */
   qualifyingDayProfit: number
+  inclusiveBar?: boolean
   /** False where the firm's minimum is one the consistency rule reaches. */
   asksTradingDays: boolean
 }
@@ -20,6 +21,7 @@ export function SnapshotPanel({
   snapshot,
   onSnapshotChange,
   qualifyingDayProfit,
+  inclusiveBar = false,
   asksTradingDays,
 }: SnapshotPanelProps) {
   return (
@@ -61,7 +63,7 @@ export function SnapshotPanel({
           unit="days"
           hint={
             qualifyingDayProfit > 0
-              ? `Days since the last payout making more than ${formatRule(qualifyingDayProfit)}; only those count.`
+              ? `Days since the last payout making ${qualifyingBar(qualifyingDayProfit, inclusiveBar)}; only those count.`
               : 'Days you have traded since the last payout.'
           }
           value={snapshot.tradingDays}

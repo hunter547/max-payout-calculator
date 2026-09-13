@@ -276,6 +276,33 @@ describe('minimum trading days', () => {
     expect(calculate({ ...growth, tradingDaysSoFar: 9 }).eligibilityDaysLeft).toBe(0)
   })
 
+  it('counts days twice over where a firm keeps two counts', () => {
+    // Apex's legacy accounts want eight trading days in all, five of them
+    // making $50 or more, so whichever is further away sets the days left.
+    const legacy = {
+      ...growth,
+      minTradingDays: 8,
+      qualifyingDayProfit: 50,
+      qualifyingDayInclusive: true,
+      minQualifyingDays: 5,
+      tradingDaysSoFar: 7,
+      qualifyingDaysSoFar: 2,
+    }
+    // Seven days in, but only two of them counted: three more are owed.
+    expect(calculate(legacy).eligibilityDaysLeft).toBe(3)
+    // The other way round, the total is what is short.
+    expect(
+      calculate({ ...legacy, tradingDaysSoFar: 5, qualifyingDaysSoFar: 5 })
+        .eligibilityDaysLeft,
+    ).toBe(3)
+    expect(
+      calculate({ ...legacy, tradingDaysSoFar: 8, qualifyingDaysSoFar: 5 })
+        .eligibilityDaysLeft,
+    ).toBe(0)
+    // A planned day only has to reach the bar, not pass it, on those terms.
+    expect(calculate(legacy).qualifyingDailyProfit).toBe(50)
+  })
+
   it('makes every planned day beat the bar the firm counts by', () => {
     const r = calculate(growth)
     expect(r.qualifyingDailyProfit).toBeCloseTo(100.01, 9)

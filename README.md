@@ -219,6 +219,20 @@ the lock, and "Restore defaults" puts the template's rules back.
 | Lucid Trading | Direct | 50k | $50,000 | none | 20% | none | every day | $500 |
 | Lucid Trading | Direct | 100k | $100,000 | none | 20% | none | every day | $500 |
 | Lucid Trading | Direct | 150k | $150,000 | none | 20% | none | every day | $500 |
+| Apex Trader Funding | EOD Drawdown | 25k | $25,000 | $26,600 | 50% | 5 | $100 or more | $500 |
+| Apex Trader Funding | EOD Drawdown | 50k | $50,000 | $52,600 | 50% | 5 | $250 or more | $500 |
+| Apex Trader Funding | EOD Drawdown | 100k | $100,000 | $103,600 | 50% | 5 | $300 or more | $500 |
+| Apex Trader Funding | EOD Drawdown | 150k | $150,000 | $154,600 | 50% | 5 | $350 or more | $500 |
+| Apex Trader Funding | Intraday Drawdown | 25k | $25,000 | $26,600 | 50% | 5 | $100 or more | $500 |
+| Apex Trader Funding | Intraday Drawdown | 50k | $50,000 | $52,600 | 50% | 5 | $200 or more | $500 |
+| Apex Trader Funding | Intraday Drawdown | 100k | $100,000 | $103,600 | 50% | 5 | $250 or more | $500 |
+| Apex Trader Funding | Intraday Drawdown | 150k | $150,000 | $154,600 | 50% | 5 | $300 or more | $500 |
+| Apex Trader Funding | Legacy | 25k | $25,000 | $26,600 | 30% → none | 8, five over $50 | $50 or more | $500 |
+| Apex Trader Funding | Legacy | 50k | $50,000 | $52,600 | 30% → none | 8, five over $50 | $50 or more | $500 |
+| Apex Trader Funding | Legacy | 100k | $100,000 | $103,100 | 30% → none | 8, five over $50 | $50 or more | $500 |
+| Apex Trader Funding | Legacy | 150k | $150,000 | $155,100 | 30% → none | 8, five over $50 | $50 or more | $500 |
+| Apex Trader Funding | Legacy | 250k | $250,000 | $256,600 | 30% → none | 8, five over $50 | $50 or more | $500 |
+| Apex Trader Funding | Legacy | 300k | $300,000 | $307,600 | 30% → none | 8, five over $50 | $50 or more | $500 |
 
 Lightning has no qualifying balance because it gates on profit earned rather
 than balance reached — see [Profit goals](#profit-goals) — and its consistency
@@ -237,6 +251,43 @@ limit plus $100 and a payout may not come out of it, so the balance a max
 payout needs is buffer plus cap — which reproduces the firm's own published
 "minimum balance for maximum payout" exactly, on all four sizes and both
 payout numbers. A test pins that table.
+
+Apex Trader Funding runs three programs. The EOD and Intraday Drawdown
+accounts share a shape — a safety net of the drawdown plus $100 held for the
+life of the account, five qualifying days, 50% consistency, six payouts and
+then the account closes — and differ only in the daily profit a day must make
+and in their max-payout tables, which are not the same on the two. Apex's
+published "minimum balance to request" is that safety net plus the $500
+minimum payout, which is what the app asks for.
+
+Apex's Legacy accounts, back on sale after being retired in March 2026, keep
+their older rules and exercise three things nothing else does:
+
+- **A floor that lapses.** The safety net holds for three payouts and is gone
+  from the fourth, leaving only the trailing drawdown's own stop at the
+  starting balance plus $100 — which fails the account if a payout lands on
+  it. `floors` carries the floor by payout number and `floorBreachesFrom` says
+  when it turns fatal, so the buffer starts being held back at the fourth.
+- **A payout with no ceiling.** The first five are capped; from the sixth Apex
+  caps nothing, which is `Infinity` in `caps`. There is then no maximum to
+  reach for, so the balance the app targets is the smallest request the firm
+  accepts — and the most it will call takeable stops a buffer above the floor
+  rather than on it.
+- **Two day counts at once.** Eight trading days in all, five of them making
+  $50 or more. `minTradingDays` counts the days and `minQualifyingDays` the
+  ones over the bar; whichever is further away sets the days still owed.
+
+Apex also words its bar as "$100 or more" where Tradeify says "more than
+$150", so `qualifyingDayInclusive` decides whether a day landing exactly on
+the figure counts, and a planned day aims at the bar rather than a cent over.
+
+Two things Apex publishes are deliberately not modelled. Its legacy split —
+100% of the first $25,000 paid out per account, then 90%, and 100% again from
+the sixth payout — is take-home rather than request size, which the app does
+not track. And Apex does not say whether the published minimum balance lapses
+with the safety net after three payouts, so the app keeps asking for it:
+asking for too much balance only delays a payout, where asking too little
+invites a denial.
 
 Consistency and minimum days sit on the template rather than the type, so a
 firm that varies them by size can say so; the type screen reads them off its

@@ -45,15 +45,26 @@ export function parseAmount(raw: string): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-/** Whether a day counts towards the firm's minimum trading days. */
-export function dayQualifies(amount: number, qualifyingProfit: number): boolean {
-  // The bar is "profit greater than", so a day exactly on it does not count.
-  return qualifyingProfit > 0 ? amount > qualifyingProfit : true
+/**
+ * Whether a day counts towards the firm's minimum trading days.
+ *
+ * Firms word the bar differently: Tradeify wants more than its figure, Apex
+ * wants that figure "or more", so a day landing exactly on it counts for one
+ * and not the other.
+ */
+export function dayQualifies(
+  amount: number,
+  qualifyingProfit: number,
+  inclusive = false,
+): boolean {
+  if (qualifyingProfit <= 0) return true
+  return inclusive ? amount >= qualifyingProfit : amount > qualifyingProfit
 }
 
 export function summarize(
   entries: DayEntry[],
   qualifyingProfit = 0,
+  inclusive = false,
 ): LedgerSummary {
   let largestProfitDay = 0
   let largestEntryId: string | null = null
@@ -67,7 +78,7 @@ export function summarize(
     netProfit += amount
     if (amount > 0) winningDays++
     if (amount < 0) losingDays++
-    if (dayQualifies(amount, qualifyingProfit)) qualifyingDays++
+    if (dayQualifies(amount, qualifyingProfit, inclusive)) qualifyingDays++
     if (amount > largestProfitDay) {
       largestProfitDay = amount
       largestEntryId = entry.id

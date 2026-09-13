@@ -11,6 +11,8 @@ import {
   ACCOUNT_PROGRAMS,
   consistencyFor,
   defaultBuffer,
+  floorBreachesAt,
+  floorAt,
   DEFAULT_PAYOUT_BUFFER,
   drawdownRoomAt,
   graduates,
@@ -77,6 +79,147 @@ describe('account templates', () => {
       // A first payout needs the firm's published minimum balance.
       expect(payoutThreshold(template.payout, 0)).toBe(qualifyingBalance)
     }
+  })
+
+  it('carries the Apex EOD and Intraday payout tables', () => {
+    // Account size, drawdown, the daily profit a day must make on each
+    // program, and the balance Apex publishes as the minimum to request.
+    const sizes = [
+      ['25k', 25000, 1000, 100, 100, 26600],
+      ['50k', 50000, 2000, 250, 200, 52600],
+      ['100k', 100000, 3000, 300, 250, 103600],
+      ['150k', 150000, 4000, 350, 300, 154600],
+    ] as const
+
+    for (const [size, start, drawdown, eodBar, intradayBar, minimum] of sizes) {
+      for (const [program, bar] of [
+        ['eod', eodBar],
+        ['intraday', intradayBar],
+      ] as const) {
+        const template = accountTemplate(`apex-${size}-${program}`)
+        expect(template).toMatchObject({
+          programId: `apex-${program}`,
+          startingBalance: start,
+          consistency: 0.5,
+          minTradingDays: 5,
+          qualifyingDayProfit: bar,
+          // Apex counts a day that lands exactly on its figure.
+          qualifyingDayInclusive: true,
+          drawdown,
+        })
+        expect(template.payout).toMatchObject({
+          minimumPayout: 500,
+          qualifyingBalance: minimum,
+          // The safety net is the drawdown plus $100, held for the life of
+          // the account, and the published minimum is that plus the $500.
+          floor: start + drawdown + 100,
+        })
+        expect(template.payout.floor! + 500).toBe(minimum)
+      }
+    }
+  })
+
+  it('graduates the Apex cap differently on EOD and Intraday', () => {
+    // Apex's published max-payout tables, payouts one through six.
+    expect(accountTemplate('apex-50k-eod').payout.caps).toEqual([
+      1500, 1500, 2000, 2500, 2500, 3000,
+    ])
+    expect(accountTemplate('apex-50k-intraday').payout.caps).toEqual([
+      1500, 2000, 2500, 2500, 3000, 3000,
+    ])
+    expect(accountTemplate('apex-150k-eod').payout.caps).toEqual([
+      2500, 3000, 3000, 3000, 4000, 5000,
+    ])
+    expect(accountTemplate('apex-150k-intraday').payout.caps).toEqual([
+      2500, 3000, 3000, 4000, 4000, 5000,
+    ])
+    // The 25k is flat at $1,000 on both, which one entry says.
+    expect(accountTemplate('apex-25k-eod').payout.caps).toEqual([1000])
+
+    // A later, bigger cap asks for a bigger balance: the floor plus the cap.
+    const eod = accountTemplate('apex-50k-eod').payout
+    expect(payoutThreshold(eod, 0)).toBe(53600)
+    expect(payoutThreshold(eod, 5)).toBe(55100)
+  })
+
+  it('carries the Apex legacy payout parameters', () => {
+    // Size, drawdown, the cap on the first five payouts, and the balance
+    // Apex publishes as the minimum to request.
+    const sizes = [
+      ['25k', 25000, 1500, 1500, 26600],
+      ['50k', 50000, 2500, 2000, 52600],
+      ['100k', 100000, 3000, 2500, 103100],
+      ['150k', 150000, 5000, 2750, 155100],
+      ['250k', 250000, 6500, 3000, 256600],
+      ['300k', 300000, 7500, 3500, 307600],
+    ] as const
+
+    for (const [size, start, drawdown, cap, minimum] of sizes) {
+      const template = accountTemplate(`apex-${size}-legacy`)
+      expect(template).toMatchObject({
+        programId: 'apex-legacy',
+        startingBalance: start,
+        consistency: 0.3,
+        // Eight trading days in all, five of them making $50 or more.
+        minTradingDays: 8,
+        qualifyingDayProfit: 50,
+        qualifyingDayInclusive: true,
+        minQualifyingDays: 5,
+        drawdown,
+      })
+      expect(template.payout.qualifyingBalance).toBe(minimum)
+      // Apex's published minimum is the safety net itself, because a payout
+      // may take the $500 minimum out of it; the floor sits that far below.
+      expect(minimum).toBe(start + drawdown + 100)
+      expect(template.payout.floors).toEqual([
+        minimum - 500,
+        minimum - 500,
+        minimum - 500,
+        start + 100,
+      ])
+      // Capped for five payouts, then not capped at all.
+      expect(payoutCap(template.payout, 0)).toBe(cap)
+      expect(payoutCap(template.payout, 4)).toBe(cap)
+      expect(payoutCap(template.payout, 5)).toBe(Infinity)
+    }
+  })
+
+  it('drops the Apex legacy safety net after three payouts', () => {
+    const legacy = accountTemplate('apex-50k-legacy')
+    const schedule = legacy.payout
+
+    // Through the third, the floor is the safety net less the $500 a payout
+    // may take out of it, so a max payout lands there.
+    expect(floorAt(schedule, 0)).toBe(52100)
+    expect(payoutThreshold(schedule, 0)).toBe(54100)
+    expect(maxPayoutFor(schedule, 0, 54100)).toBe(2000)
+
+    // From the fourth there is no net, only the trailing drawdown's own stop
+    // at the starting balance plus $100 — which a payout must not land on.
+    expect(floorAt(schedule, 3)).toBe(50100)
+    expect(floorBreachesAt(schedule, 0)).toBe(false)
+    expect(floorBreachesAt(schedule, 3)).toBe(true)
+    const buffer = defaultBuffer(legacy)
+    expect(payoutThreshold(schedule, 3, buffer)).toBe(50100 + 2000 + buffer)
+
+    // Uncapped from the sixth: the balance above the floor is the only
+    // limit, less the buffer, since landing on that floor fails the account.
+    expect(payoutCap(schedule, 5)).toBe(Infinity)
+    expect(maxPayoutFor(schedule, 5, 60000, buffer)).toBe(60000 - 50100 - buffer)
+    // With no cap to reach for, the balance it wants is the smallest request
+    // — but Apex's published minimum to request still stands above that, and
+    // its help center never says that minimum lapses with the net, so it is
+    // taken to hold and the higher of the two wins.
+    expect(50100 + 500 + buffer).toBeLessThan(52600)
+    expect(payoutThreshold(schedule, 5, buffer)).toBe(52600)
+  })
+
+  it('lets the Apex legacy consistency rule lapse after six payouts', () => {
+    const legacy = accountTemplate('apex-50k-legacy')
+    expect(consistencyFor(legacy, 'base', 0)).toBe(0.3)
+    expect(consistencyFor(legacy, 'base', 5)).toBe(0.3)
+    // A single day may be the whole profit once the rule is behind you.
+    expect(consistencyFor(legacy, 'base', 6)).toBe(1)
   })
 
   it('graduates the payout cap by how many have been taken', () => {
@@ -167,6 +310,7 @@ describe('account templates', () => {
             schedule,
             n,
             payoutThreshold(schedule, n, buffer),
+            buffer,
           )
           expect(roomIsThin(t, room)).toBe(false)
         }
@@ -175,12 +319,23 @@ describe('account templates', () => {
   })
 
   it('takes each drawdown from where the firm locks the floor', () => {
-    // floor = size + 100, and the lock triggers at size + drawdown + 100, so
-    // the two tables have to agree.
+    // Where a firm withholds the lock itself, floor = size + 100 and the lock
+    // triggers at size + drawdown + 100, so the two tables have to agree.
+    // Apex withholds its safety net instead, which is the lock plus the
+    // drawdown; its legacy accounts drop to the lock once the net lapses.
     for (const t of ACCOUNT_TEMPLATES) {
       if (t.drawdown === undefined) continue
-      expect(t.payout.floor).toBe(t.startingBalance + 100)
       expect(t.drawdown).toBeGreaterThan(0)
+      const net = t.startingBalance + t.drawdown + 100
+      if (t.programId.startsWith('apex-')) {
+        const floors = t.payout.floors
+        expect(floors ? floors[0] : t.payout.floor).toBe(
+          floors ? net - t.payout.minimumPayout : net,
+        )
+        if (floors) expect(floors[floors.length - 1]).toBe(t.startingBalance + 100)
+      } else {
+        expect(t.payout.floor).toBe(t.startingBalance + 100)
+      }
     }
     expect(
       ACCOUNT_TEMPLATES.filter((t) => t.programId === 'tradeify-growth').map(

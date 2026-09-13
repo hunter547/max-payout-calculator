@@ -111,3 +111,11 @@ export function countWord(n: number): string {
 export function formatPlan(days: number, dailyProfit: number): string {
   return `${days} ${days === 1 ? 'day' : 'days'} at ${formatCurrency(dailyProfit)}`
 }
+
+/**
+ * How a firm words its qualifying-day bar. Tradeify counts a day that makes
+ * more than its figure; Apex counts one that makes the figure or more.
+ */
+export function qualifyingBar(value: number, inclusive = false): string {
+  return `${inclusive ? 'at least' : 'more than'} ${formatRule(value)}`
+}

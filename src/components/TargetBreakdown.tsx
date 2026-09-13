@@ -5,6 +5,7 @@ import {
   formatPercent,
   formatRule,
   formatSignedCurrency,
+  qualifyingBar,
 } from '@/lib/format'
 
 interface TargetBreakdownProps {
@@ -96,7 +97,7 @@ export function TargetBreakdown({
       value: `${Math.min(inputs.tradingDaysSoFar, inputs.minTradingDays)} of ${inputs.minTradingDays}`,
       note: [
         inputs.qualifyingDayProfit > 0
-          ? `Only days over ${formatRule(inputs.qualifyingDayProfit)} count${
+          ? `Only days making ${qualifyingBar(inputs.qualifyingDayProfit, inputs.qualifyingDayInclusive)} count${
               tradingDays && tradingDays.counting < tradingDays.logged
                 ? `, so ${tradingDays.counting} of your ${tradingDays.logged} do`
                 : ''

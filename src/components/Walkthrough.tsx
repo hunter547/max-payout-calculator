@@ -35,7 +35,12 @@ import {
   type Plan,
   type Strategy,
 } from '@/lib/calc'
-import { formatCurrency, formatPercent, formatRule } from '@/lib/format'
+import {
+  formatCurrency,
+  formatPercent,
+  formatRule,
+  qualifyingBar,
+} from '@/lib/format'
 import {
   isAmount,
   newId,
@@ -217,7 +222,7 @@ function stepCopy(step: StepId, draft: SetupDraft) {
             : 'How many days have you traded since your last payout?',
         lead: `${firmOf(template).name} needs ${template.minTradingDays} trading ${template.minTradingDays === 1 ? 'day' : 'days'} before it will pay out${
           template.qualifyingDayProfit > 0
-            ? `, and only days making more than ${formatRule(template.qualifyingDayProfit)} count towards them`
+            ? `, and only days making ${qualifyingBar(template.qualifyingDayProfit, template.qualifyingDayInclusive)} count towards them`
             : ''
         }. Enter 0 if this cycle is fresh.`,
       }
