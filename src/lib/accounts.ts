@@ -12,7 +12,7 @@
 
 import lucidLogo from '@/assets/brands/lucid.webp'
 import mffuLogo from '@/assets/brands/mffu.svg'
-import topstepLogo from '@/assets/brands/topstep.webp'
+import topstepLogo from '@/assets/brands/topstep.svg'
 import tradeifyLogo from '@/assets/brands/tradeify.svg'
 
 export interface Firm {
