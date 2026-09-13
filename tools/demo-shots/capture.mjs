@@ -203,7 +203,11 @@ async function toPlan(page, { firm, program, size, payouts = 0, days, strategy =
     firm: 'topstep', program: 'topstep-xfa-consistency', size: 'topstep-50k-xfa-consistency',
     days: [['2026-09-09', '1400'], ['2026-09-10', '1100']],
   })
-  await pick(page, 'curated')
+  // The plan toggle is a toggle group, so it goes by its label, not a value.
+  await page
+    .locator('[aria-labelledby="strategy-label"]')
+    .getByText('Curated', { exact: true })
+    .click()
   await page.waitForTimeout(700)
   await page.screenshot({ path: `${OUT}/8-curated.png`, clip: { x: 0, y: 0, width: 1440, height: 960 } })
   console.log('8 curated captured')
@@ -219,8 +223,8 @@ async function toPlan(page, { firm, program, size, payouts = 0, days, strategy =
            ['2026-09-09', '760'], ['2026-09-10', '940']],
   })
   await page.getByRole('button', { name: 'Payout taken' }).click()
-  // Let the confetti fall into a good-looking frame.
-  await page.waitForTimeout(1400)
+  // Catch the confetti mid-fall, not after it has settled.
+  await page.waitForTimeout(650)
   await page.screenshot({ path: `${OUT}/9-payout-flow.png`, clip: { x: 0, y: 0, width: 1440, height: 900 } })
   console.log('9 payout flow captured')
   await ctx.close()

@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Demo captures are regenerated from tools/demo-shots; only demo/ is kept.
+tools/demo-shots/out/
+tools/demo-shots/card.html

@@ -14,6 +14,8 @@ the app covers rules it never had, and the formula it reached for is wrong in
 four places — see [Where the obvious formula goes
 wrong](#where-the-obvious-formula-goes-wrong), each pinned by a test.
 
+Screens of it in use are in [`demo/`](demo/README.md).
+
 ## Running it
 
 ```bash
