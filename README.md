@@ -187,6 +187,10 @@ the lock, and "Restore defaults" puts the template's rules back.
 | Topstep | XFA Consistency | 50k | $0 | — | 40% | 3 | every day | $125 |
 | Topstep | XFA Consistency | 100k | $0 | — | 40% | 3 | every day | $125 |
 | Topstep | XFA Consistency | 150k | $0 | — | 40% | 3 | every day | $125 |
+| Lucid Trading | Pro | 25k | $25,000 | — | 40% | none | every day | $500 |
+| Lucid Trading | Pro | 50k | $50,000 | — | 40% | none | every day | $500 |
+| Lucid Trading | Pro | 100k | $100,000 | — | 40% | none | every day | $500 |
+| Lucid Trading | Pro | 150k | $150,000 | — | 40% | none | every day | $500 |
 
 Lightning has no qualifying balance because it gates on profit earned rather
 than balance reached — see [Profit goals](#profit-goals) — and its consistency
@@ -194,6 +198,13 @@ rule tightens with each payout. Topstep's Express Funded Account counts profit
 up from zero like a Builder, and caps a request at half the balance — see
 [A share of the balance](#a-share-of-the-balance). Its three trading days are
 what a 40% consistency rule takes anyway, so they never bind.
+
+LucidPro gates on both at once: a profit goal between cycles ($250 to $1,000 by
+size) and a balance above its buffer. The buffer is the account's max loss
+limit plus $100 and a payout may not come out of it, so the balance a max
+payout needs is buffer plus cap — which reproduces the firm's own published
+"minimum balance for maximum payout" exactly, on all four sizes and both
+payout numbers. A test pins that table.
 
 Consistency and minimum days sit on the template rather than the type, so a
 firm that varies them by size can say so; the type screen reads them off its
@@ -294,6 +305,8 @@ schedule exists. A firm added later with
 either gets the walkthrough screen and the dashboard controls for free.
 
 Sourced from [Builder Plan 25k](https://help.myfundedfutures.com/en/articles/15862870-builder-plan-25k-a-comprehensive-guide),
+[LucidPro
+Payouts](https://support.lucidtrading.com/en/articles/12890092-lucidpro-payouts),
 [Topstep Payout
 Policy](https://help.topstep.com/en/articles/8284233-topstep-payout-policy),
 [Lightning Funded: Account Payout
@@ -329,9 +342,11 @@ dashboard's Account panel. The header never shows it: it names the account in
 words instead.
 
 The logos in `src/assets/brands/` are the white-on-dark art from each firm's
-own site header — SVG where the firm publishes one, and Topstep's wordmark as
-the webp its header serves, since it has no SVG. They sit there unused until a
-firm is registered, so
+own site header — SVG where the firm publishes one, and a webp where it has
+none (Topstep, Lucid Trading). A logo may set `scale` where its lockup is squat
+rather than a long wordmark, so it reads at the same row height; Lucid's is
+174×90 and wants about 1.6. They sit there unused until a firm is registered,
+so
 [`FirmLogo`](src/components/FirmLogo.tsx) sets them on a dark plate in light
 mode and drops the plate in dark mode, where the art already fits.
 
@@ -577,14 +592,15 @@ included.
 | MyFundedFutures | dark only | colors and typeface (Lexend) from myfundedfutures.com |
 | Tradeify | dark only | colors and typeface (Mona Sans) from tradeify.co |
 | Topstep | dark only | colors and typeface (Work Sans) from topstep.com |
+| Lucid Trading | dark only | colors and typeface (Inter) from lucidtrading.com |
 
 Picking a firm in the walkthrough switches to its theme, as does switching
 accounts on the dashboard. Themes carry no logos of their own — a logo belongs
 to the firm, in `FIRMS`, and shows next to the account whichever theme is on.
 
-A theme can arrive before its accounts do: Topstep has its colors and typeface
-here but no entry in `FIRMS` yet, so it is offered in the theme picker and
-nowhere else. Themes taken from a firm's own site are marked `firm: true`, and
+A theme can arrive before its accounts do, as Lucid Trading's did: it is
+offered in the theme picker from the moment it exists, and everywhere else once
+the firm is registered. Themes taken from a firm's own site are marked `firm: true`, and
 the footer's not-affiliated line is built from those plus `FIRMS`, so a firm is
 named from the moment the app wears its colors.
 

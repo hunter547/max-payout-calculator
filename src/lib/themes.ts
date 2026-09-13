@@ -51,6 +51,13 @@ export const BRAND_THEMES: readonly BrandTheme[] = [
     swatches: ['#000000', '#d5a161', '#1b2945'],
     firm: true,
   },
+  {
+    id: 'lucid',
+    name: 'Lucid Trading',
+    schemes: ['dark'],
+    swatches: ['#090909', '#61f8ab', '#35435a'],
+    firm: true,
+  },
 ]
 
 /** The firms the app dresses itself as, whether or not it holds their accounts. */

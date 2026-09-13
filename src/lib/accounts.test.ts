@@ -400,6 +400,68 @@ describe('account templates', () => {
     expect(maxPayoutFor(growth, 3, 53600)).toBe(3000)
   })
 
+  it('reproduces the LucidPro table of balances for a max payout', () => {
+    // Their own columns: the buffer a payout may not come out of, the cap on
+    // the first payout and on every one after, and the balance each needs.
+    const table = [
+      ['lucid-25k-pro', 25000, 26100, 250, 1000, 27100, 1500, 27600],
+      ['lucid-50k-pro', 50000, 52100, 500, 2000, 54100, 2500, 54600],
+      ['lucid-100k-pro', 100000, 103100, 750, 2500, 105600, 3000, 106100],
+      ['lucid-150k-pro', 150000, 154600, 1000, 3000, 157600, 3500, 158100],
+    ] as const
+
+    for (const [id, size, buffer, goal, first, forFirst, later, forLater] of table) {
+      const template = accountTemplate(id)
+      expect(template).toMatchObject({
+        programId: 'lucid-pro',
+        startingBalance: size,
+        consistency: 0.4,
+        // No day count at all, and no profit bar on a day.
+        minTradingDays: 0,
+        qualifyingDayProfit: 0,
+      })
+      expect(template.payout).toMatchObject({
+        minimumPayout: 500,
+        floor: buffer,
+      })
+      // The buffer is the max loss limit plus $100.
+      expect(buffer - size - 100).toBeGreaterThan(0)
+
+      // The profit goal between cycles, flat whatever the payout number.
+      expect([0, 1, 4].map((n) => profitGoal(template.payout, n))).toEqual([
+        goal,
+        goal,
+        goal,
+      ])
+
+      // The cap rises once after the first payout, and the balance each takes
+      // is the buffer plus that cap.
+      expect(payoutCap(template.payout, 0)).toBe(first)
+      expect(payoutThreshold(template.payout, 0)).toBe(forFirst)
+      expect(payoutCap(template.payout, 1)).toBe(later)
+      expect(payoutThreshold(template.payout, 1)).toBe(forLater)
+      expect(payoutThreshold(template.payout, 9)).toBe(forLater)
+
+      // The buffer is withheld rather than a level the account dies at, so
+      // no extra room is asked for on top.
+      expect(template.payout.floorBreaches).toBeUndefined()
+      expect(drawdownRoomAt(template.payout, 0, forFirst)).toBeNull()
+    }
+  })
+
+  it('asks LucidPro where it is in its payouts, and nothing else', () => {
+    const template = accountTemplate('lucid-50k-pro')
+    // The cap moves with the payout number, so the count is worth asking.
+    expect(hasSchedule(template)).toBe(true)
+    expect(graduates(template.payout)).toBe(true)
+    // There is no second set of terms to tell apart.
+    expect(template.alt).toBeUndefined()
+    expect(programOf(template).variant).toBeUndefined()
+    // And 40% consistency takes three days on its own, so its lack of a
+    // minimum changes nothing.
+    expect(tradingDaysBind(0, 0.4)).toBe(false)
+  })
+
   it('falls back to the default for an unknown id', () => {
     expect(accountTemplate('no-such-account').id).toBe(DEFAULT_TEMPLATE)
   })

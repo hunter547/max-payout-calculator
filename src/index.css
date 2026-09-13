@@ -6,6 +6,7 @@
 @import "@fontsource-variable/lexend/index.css";
 @import "@fontsource-variable/mona-sans/wdth.css";
 @import "@fontsource-variable/work-sans/index.css";
+@import "@fontsource-variable/inter/index.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -282,6 +283,51 @@
   --cap: #d5a161;
   --grid: #141c22;
   --axis: #334654;
+}
+
+/*
+  Theme: Lucid Trading. Dark only, from lucidtrading.com.
+    Night  #090909  page
+    Panel  #111111  chart plate, cards
+    Mint   #61F8AB  actions, with their dark ink on top
+    Slate  #35435A  the blue-grey of their secondary buttons
+    Ash    #A6ABB0  secondary text
+  Type: Inter, the free half of their type. Their headings are set in
+  Transducer, licensed through Adobe Fonts, so Inter carries the theme; it has
+  no width axis, so the expanded/condensed utilities fall back to normal.
+  Mint is the brand and takes --primary, but as a bar it sits outside the dark
+  lightness band, so the chart keeps the validated trio and the cap line takes
+  the same amber as the other firm themes.
+*/
+:root[data-brand='lucid'] {
+  color-scheme: dark;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --background: #090909;
+  --foreground: #ffffff;
+  --card: #111111;
+  --card-foreground: #ffffff;
+  --popover: #161616;
+  --popover-foreground: #ffffff;
+  --primary: #61f8ab;
+  --primary-foreground: #04170e;
+  --secondary: #35435a;
+  --secondary-foreground: #ffffff;
+  --muted: #161616;
+  --muted-foreground: #a6abb0;
+  --accent: #1f2937;
+  --accent-foreground: #ffffff;
+  --destructive: #d2463c;
+  --border: #2d2e30;
+  --input: #34373a;
+  --ring: #61f8ab;
+
+  --profit: #2daa80;
+  --loss: #d2463c;
+  --plan: #4f7bf0;
+  --cap: #efa22b;
+  --grid: #1a1a1a;
+  --axis: #3e424a;
 }
 
 @utility font-display {

@@ -10,6 +10,7 @@
  * afterwards; a template is a starting point.
  */
 
+import lucidLogo from '@/assets/brands/lucid.webp'
 import mffuLogo from '@/assets/brands/mffu.svg'
 import topstepLogo from '@/assets/brands/topstep.webp'
 import tradeifyLogo from '@/assets/brands/tradeify.svg'
@@ -24,7 +25,12 @@ export interface Firm {
    * site headers, so light grounds need a dark plate behind them; that's what
    * `FirmLogo` does.
    */
-  logo: { src: string; alt: string }
+  logo: {
+    src: string
+    alt: string
+    /** Drawn taller than the row's height, for a lockup that is not a long wordmark. */
+    scale?: number
+  }
 }
 
 export const FIRMS: readonly Firm[] = [
@@ -45,6 +51,13 @@ export const FIRMS: readonly Firm[] = [
     name: 'Topstep',
     themeId: 'topstep',
     logo: { src: topstepLogo, alt: 'Topstep logo' },
+  },
+  {
+    id: 'lucid',
+    name: 'Lucid Trading',
+    themeId: 'lucid',
+    // A squat lockup rather than a long wordmark, so it needs the height.
+    logo: { src: lucidLogo, alt: 'Lucid Trading logo', scale: 1.6 },
   },
 ]
 
@@ -93,6 +106,7 @@ export const ACCOUNT_PROGRAMS: readonly AccountProgram[] = [
     name: 'Lightning',
     variant: TRADEIFY_CUTOFF,
   },
+  { id: 'lucid-pro', firmId: 'lucid', name: 'Pro' },
   {
     id: 'topstep-xfa-consistency',
     firmId: 'topstep',
@@ -510,6 +524,82 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
       qualifyingBalance: 0,
       withdrawShare: 0.5,
       floor: 0,
+    },
+  },
+  {
+    // The buffer is the account's max loss limit plus $100, and a payout may
+    // not come out of it, so the balance a max payout needs is the buffer
+    // plus the cap — which is the firm's own published figure.
+    id: 'lucid-25k-pro',
+    programId: 'lucid-pro',
+    name: '25k',
+    startingBalance: 25000,
+    consistency: 0.4,
+    minTradingDays: 0,
+    qualifyingDayProfit: 0,
+    payout: {
+      caps: [1000, 1500],
+      goals: [250],
+      minimumPayout: 500,
+      qualifyingBalance: 0,
+      floor: 26100,
+    },
+  },
+  {
+    // The buffer is the account's max loss limit plus $100, and a payout may
+    // not come out of it, so the balance a max payout needs is the buffer
+    // plus the cap — which is the firm's own published figure.
+    id: 'lucid-50k-pro',
+    programId: 'lucid-pro',
+    name: '50k',
+    startingBalance: 50000,
+    consistency: 0.4,
+    minTradingDays: 0,
+    qualifyingDayProfit: 0,
+    payout: {
+      caps: [2000, 2500],
+      goals: [500],
+      minimumPayout: 500,
+      qualifyingBalance: 0,
+      floor: 52100,
+    },
+  },
+  {
+    // The buffer is the account's max loss limit plus $100, and a payout may
+    // not come out of it, so the balance a max payout needs is the buffer
+    // plus the cap — which is the firm's own published figure.
+    id: 'lucid-100k-pro',
+    programId: 'lucid-pro',
+    name: '100k',
+    startingBalance: 100000,
+    consistency: 0.4,
+    minTradingDays: 0,
+    qualifyingDayProfit: 0,
+    payout: {
+      caps: [2500, 3000],
+      goals: [750],
+      minimumPayout: 500,
+      qualifyingBalance: 0,
+      floor: 103100,
+    },
+  },
+  {
+    // The buffer is the account's max loss limit plus $100, and a payout may
+    // not come out of it, so the balance a max payout needs is the buffer
+    // plus the cap — which is the firm's own published figure.
+    id: 'lucid-150k-pro',
+    programId: 'lucid-pro',
+    name: '150k',
+    startingBalance: 150000,
+    consistency: 0.4,
+    minTradingDays: 0,
+    qualifyingDayProfit: 0,
+    payout: {
+      caps: [3000, 3500],
+      goals: [1000],
+      minimumPayout: 500,
+      qualifyingBalance: 0,
+      floor: 154600,
     },
   },
 ]

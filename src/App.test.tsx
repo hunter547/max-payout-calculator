@@ -200,12 +200,14 @@ describe('walkthrough', () => {
       'MyFundedFutures logo',
       'Tradeify logo',
       'Topstep logo',
+      'Lucid Trading logo',
     ])
     // One line per account type the firm offers.
     expect(text()).toContain('Builder: 2 sizes, 25k to 50k')
     expect(text()).toContain('Growth: 4 sizes, 25k to 150k')
     expect(text()).toContain('Lightning: 4 sizes, 25k to 150k')
     expect(text()).toContain('XFA Consistency: 3 sizes, 50k to 150k')
+    expect(text()).toContain('Pro: 4 sizes, 25k to 150k')
   })
 
   it('asks for a firm before moving on', () => {
@@ -1143,7 +1145,7 @@ describe('color themes', () => {
     expect(footer).toContain('Your entries are saved in this browser only.')
     // Named whether the app holds their accounts or only wears their colors.
     expect(footer).toContain(
-      'Not affiliated with or endorsed by MyFundedFutures, Tradeify, or Topstep.',
+      'Not affiliated with or endorsed by MyFundedFutures, Tradeify, Topstep, or Lucid Trading.',
     )
   })
 })

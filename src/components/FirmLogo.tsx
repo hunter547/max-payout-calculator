@@ -7,7 +7,7 @@ interface FirmLogoProps {
   className?: string
 }
 
-const HEIGHT = { sm: 'h-3.5', md: 'h-5', lg: 'h-7' }
+const HEIGHT = { sm: 14, md: 20, lg: 28 }
 
 /**
  * A firm's logo, wherever its account is shown. Both logos are white-on-dark
@@ -16,6 +16,9 @@ const HEIGHT = { sm: 'h-3.5', md: 'h-5', lg: 'h-7' }
  */
 export function FirmLogo({ firmId, size = 'md', className }: FirmLogoProps) {
   const { logo } = firm(firmId)
+  // Logos are drawn at whatever aspect their firm chose, and a squat lockup
+  // needs more height than a long wordmark to read at the same size.
+  const height = HEIGHT[size] * (logo.scale ?? 1)
   return (
     <span
       className={cn(
@@ -23,7 +26,12 @@ export function FirmLogo({ firmId, size = 'md', className }: FirmLogoProps) {
         className,
       )}
     >
-      <img src={logo.src} alt={logo.alt} className={cn('block w-auto', HEIGHT[size])} />
+      <img
+        src={logo.src}
+        alt={logo.alt}
+        style={{ height }}
+        className="block w-auto"
+      />
     </span>
   )
 }
