@@ -10,9 +10,13 @@
  * afterwards; a template is a starting point.
  */
 
+import lucidIcon from '@/assets/brands/lucid-icon.svg'
 import lucidLogo from '@/assets/brands/lucid.svg'
+import mffuIcon from '@/assets/brands/mffu-icon.svg'
 import mffuLogo from '@/assets/brands/mffu.svg'
+import topstepIcon from '@/assets/brands/topstep-icon.svg'
 import topstepLogo from '@/assets/brands/topstep.svg'
+import tradeifyIcon from '@/assets/brands/tradeify-icon.svg'
 import tradeifyLogo from '@/assets/brands/tradeify.svg'
 
 export interface Firm {
@@ -31,6 +35,12 @@ export interface Firm {
     /** Drawn taller than the row's height, for a lockup that is not a long wordmark. */
     scale?: number
   }
+  /**
+   * The firm's app icon: the square mark it goes by, for places too tight for
+   * a lockup. Each is the firm's own, so some carry their own ground and some
+   * are bare art.
+   */
+  icon: string
 }
 
 export const FIRMS: readonly Firm[] = [
@@ -39,18 +49,21 @@ export const FIRMS: readonly Firm[] = [
     name: 'MyFundedFutures',
     themeId: 'mffu',
     logo: { src: mffuLogo, alt: 'MyFundedFutures logo' },
+    icon: mffuIcon,
   },
   {
     id: 'tradeify',
     name: 'Tradeify',
     themeId: 'tradeify',
     logo: { src: tradeifyLogo, alt: 'Tradeify logo' },
+    icon: tradeifyIcon,
   },
   {
     id: 'topstep',
     name: 'Topstep',
     themeId: 'topstep',
     logo: { src: topstepLogo, alt: 'Topstep logo' },
+    icon: topstepIcon,
   },
   {
     id: 'lucid',
@@ -58,6 +71,7 @@ export const FIRMS: readonly Firm[] = [
     themeId: 'lucid',
     // A squat lockup rather than a long wordmark, so it needs the height.
     logo: { src: lucidLogo, alt: 'Lucid Trading logo', scale: 1.6 },
+    icon: lucidIcon,
   },
 ]
 

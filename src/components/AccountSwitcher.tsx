@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Check, ChevronDown, Pencil, Plus, Trash2 } from 'lucide-react'
-import { FirmLogo } from '@/components/FirmLogo'
+import { FirmIcon } from '@/components/FirmIcon'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -86,7 +86,7 @@ export function AccountSwitcher({
           <ChevronDown className="opacity-60" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-88">
+      <DropdownMenuContent align="start" className="w-80">
         {accounts.map((account) => {
           const firm = firmOf(accountTemplate(account.setup.templateId))
           return (
@@ -95,7 +95,7 @@ export function AccountSwitcher({
               onSelect={() => onSwitch(account.id)}
               className="gap-2"
             >
-              <FirmLogo firmId={firm.id} size="sm" />
+              <FirmIcon firmId={firm.id} />
               <span className="min-w-0 flex-1 truncate">
                 {accountName(account, accounts)}
               </span>

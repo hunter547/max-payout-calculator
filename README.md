@@ -136,7 +136,7 @@ is sent anywhere.
 Traders run more than one account, so the app keeps a list of them
 ([`src/lib/portfolio.ts`](src/lib/portfolio.ts)) and shows one at a time. The
 account name in the header is a switcher: it lists what you have with each
-firm's logo, and adds, renames or removes one.
+firm's icon, and adds, renames or removes one.
 
 Everything else is per account — its template and rules, its ledger or numbers,
 its payout schedule and its payouts taken — so two Tradeify 50k Growths sit
@@ -189,7 +189,7 @@ level of the question:
 
 | Registry | What it carries |
 |----------|-----------------|
-| `FIRMS` | the firm's name, color theme, and logo |
+| `FIRMS` | the firm's name, color theme, logo, and app icon |
 | `ACCOUNT_PROGRAMS` | an account type, e.g. Builder or Growth, and its cutoff date |
 | `ACCOUNT_TEMPLATES` | one size of one type, with its rules and payout schedule |
 
@@ -375,14 +375,23 @@ the full account, as each is settled), and above the account picker in the
 dashboard's Account panel. The header never shows it: it names the account in
 words instead.
 
-The logos in `src/assets/brands/` are the white-on-dark art from each firm's
-own site header — SVG where the firm publishes one, and a webp where it has
-none (Topstep, Lucid Trading). A logo may set `scale` where its lockup is squat
-rather than a long wordmark, so it reads at the same row height; Lucid's is
-174×90 and wants about 1.6. They sit there unused until a firm is registered,
-so
-[`FirmLogo`](src/components/FirmLogo.tsx) sets them on a dark plate in light
-mode and drops the plate in dark mode, where the art already fits.
+The logos in `src/assets/brands/` are the white-on-dark lockups from each
+firm's own site header, all vector. A logo may set `scale` where its lockup is
+squat rather than a long wordmark, so it reads at the same row height; Lucid's
+wants about 1.6. [`FirmLogo`](src/components/FirmLogo.tsx) sets them on a dark
+plate in light mode and drops the plate in dark mode, where the art already
+fits.
+
+Each firm also carries an `icon`: the square mark it goes by, the same art as
+its own app icon or favicon. That is what the account switcher's rows show,
+where a lockup would crowd the name.
+[`FirmIcon`](src/components/FirmIcon.tsx) draws it plainly — every icon brings
+whatever ground it has, so none needs a plate.
+
+Two of them are built out of the lockup beside them rather than traced
+separately: Tradeify's `tdfy` reuses the `t`, `d` and `f`-`y` outlines from
+`tradeify.svg`, and MyFundedFutures' shield is the mark out of `mffu.svg`. Keep
+that in mind when replacing a lockup — the icon shares its outlines.
 
 ### Minimum trading days
 
