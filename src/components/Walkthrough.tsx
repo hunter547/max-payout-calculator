@@ -170,13 +170,20 @@ function stepCopy(step: StepId, draft: SetupDraft) {
         title: 'Which account size?',
         lead: 'The size sets where your balance starts and the balance a max payout needs.',
       }
-    case 'payouts':
+    case 'payouts': {
+      const counts =
+        graduates(template.payout) || graduates(template.alt ?? template.payout)
       return {
-        title: 'Where are you in your payout schedule?',
-        lead: `${firmOf(template).name} caps each payout by how many you have taken, so the count sets your target${
-          template.before ? ', as does when you bought the account' : ''
-        }. You also set the buffer a payout leaves behind, which the firm does not fix for you.`,
+        title: counts
+          ? 'Where are you in your payout schedule?'
+          : 'How is this account set up?',
+        lead: counts
+          ? `${firmOf(template).name} caps each payout by how many you have taken, so the count sets your target${
+              template.alt ? ', as do the terms you are on' : ''
+            }. You also set the buffer a payout leaves behind, which the firm does not fix for you.`
+          : `What ${firmOf(template).name} lets you withdraw depends on it.`,
       }
+    }
     case 'approach':
       return {
         title: 'How do you want to track this payout?',
@@ -333,7 +340,7 @@ export function Walkthrough({
       daySummary,
       accountFor(
         accountTemplate(draft.templateId),
-        draft.era,
+        draft.terms,
         parseAmount(draft.payoutsSoFar),
         parseAmount(draft.payoutBuffer),
       ),
@@ -609,10 +616,10 @@ export function Walkthrough({
       body = (
         <ScheduleControls
           template={accountTemplate(draft.templateId)}
-          era={draft.era}
+          terms={draft.terms}
           payoutsSoFar={draft.payoutsSoFar}
           payoutBuffer={draft.payoutBuffer}
-          onEraChange={(era) => update({ era })}
+          onTermsChange={(terms) => update({ terms })}
           onPayoutsChange={(payoutsSoFar) => update({ payoutsSoFar })}
           onBufferChange={(payoutBuffer) => update({ payoutBuffer })}
           idPrefix="walkthrough-schedule"

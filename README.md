@@ -156,10 +156,16 @@ the lock, and "Restore defaults" puts the template's rules back.
 | Tradeify | Lightning | 50k | $50,000 | — | 20% → 30% | none | — | $1,000 |
 | Tradeify | Lightning | 100k | $100,000 | — | 20% → 30% | none | — | $1,000 |
 | Tradeify | Lightning | 150k | $150,000 | — | 20% → 30% | none | — | $1,000 |
+| Topstep | XFA Consistency | 50k | $0 | — | 40% | 3 | every day | $125 |
+| Topstep | XFA Consistency | 100k | $0 | — | 40% | 3 | every day | $125 |
+| Topstep | XFA Consistency | 150k | $0 | — | 40% | 3 | every day | $125 |
 
 Lightning has no qualifying balance because it gates on profit earned rather
 than balance reached — see [Profit goals](#profit-goals) — and its consistency
-rule tightens with each payout.
+rule tightens with each payout. Topstep's Express Funded Account counts profit
+up from zero like a Builder, and caps a request at half the balance — see
+[A share of the balance](#a-share-of-the-balance). Its three trading days are
+what a 40% consistency rule takes anyway, so they never bind.
 
 Consistency and minimum days sit on the template rather than the type, so a
 firm that varies them by size can say so; the type screen reads them off its
@@ -177,13 +183,14 @@ The balance a max payout needs is not a fixed number for every firm. A
 | `consistencies` | the consistency rule by payout number, where a firm raises it |
 | `minimumPayout` | the smallest request the firm accepts |
 | `qualifyingBalance` | the balance a payout request needs at all, 0 where none is published |
+| `withdrawShare` | the share of the balance one request may take, where a firm caps it that way |
 | `floor` | what has to remain afterwards |
 | `floorBreaches` | whether landing on the floor fails the account, or it is merely withheld |
 
 From those, `payoutThreshold(schedule, payoutsSoFar, buffer)` is
 
 ```
-max(qualifyingBalance, floor + cap for that payout number + buffer)
+max(qualifyingBalance, floor + cap + buffer, cap / withdrawShare)
 ```
 
 which is the number written into the dashboard's "Balance for max payout".
@@ -223,7 +230,8 @@ which needs a balance of $53,200 and leaves $100 of drawdown room."
 from, and returns null where the floor is not a fail level.
 
 **Tradeify Growth is graduated.** The cap rises with the payout number, and
-accounts bought before September 12, 2025 at 8:00 AM EST keep an older table:
+accounts bought before September 12, 2025 at 8:00 AM EST are on a second set of
+terms with an older table:
 
 | Payout | 25k | 50k | 100k | 150k |
 |--------|-----|-----|------|------|
@@ -258,6 +266,8 @@ schedule exists. A firm added later with
 either gets the walkthrough screen and the dashboard controls for free.
 
 Sourced from [Builder Plan 25k](https://help.myfundedfutures.com/en/articles/15862870-builder-plan-25k-a-comprehensive-guide),
+[Topstep Payout
+Policy](https://help.topstep.com/en/articles/8284233-topstep-payout-policy),
 [Lightning Funded: Account Payout
 Policy](https://help.tradeify.co/en/articles/10495932-lightning-funded-account-payout-policy),
 [Lightning Funded
@@ -290,8 +300,10 @@ the full account, as each is settled), and above the account picker in the
 dashboard's Account panel. The header never shows it: it names the account in
 words instead.
 
-Both SVGs in `src/assets/brands/` are the white-on-dark logos from each firm's
-own site header (a comment in each file records the source URL), so
+The logos in `src/assets/brands/` are the white-on-dark art from each firm's
+own site header — SVG where the firm publishes one, and Topstep's wordmark as
+the webp its header serves, since it has no SVG. They sit there unused until a
+firm is registered, so
 [`FirmLogo`](src/components/FirmLogo.tsx) sets them on a dark plate in light
 mode and drops the plate in dark mode, where the art already fits.
 
@@ -513,12 +525,17 @@ included.
 | Default | light and dark | the app's own palette |
 | MyFundedFutures | dark only | colors and typeface (Lexend) from myfundedfutures.com |
 | Tradeify | dark only | colors and typeface (Mona Sans) from tradeify.co |
+| Topstep | dark only | colors and typeface (Work Sans) from topstep.com |
 
 Picking a firm in the walkthrough switches to its theme, as does switching
 accounts on the dashboard. Themes carry no logos of their own — a logo belongs
 to the firm, in `FIRMS`, and shows next to the account whichever theme is on.
-The footer says the app isn't affiliated with or endorsed by those firms; that
-list is built from `FIRMS`, so a new one joins it automatically.
+
+A theme can arrive before its accounts do: Topstep has its colors and typeface
+here but no entry in `FIRMS` yet, so it is offered in the theme picker and
+nowhere else. Themes taken from a firm's own site are marked `firm: true`, and
+the footer's not-affiliated line is built from those plus `FIRMS`, so a firm is
+named from the moment the app wears its colors.
 
 A dark-only theme hides the light/dark toggle; the trader's light/dark
 preference is kept and comes back with a theme that has both.
@@ -532,7 +549,8 @@ Themes are meant to follow the trader's prop firm later on. To add one:
    typeface, also set `--font-sans` and import the font at the top of the
    file (fonts only download for the theme that uses them).
 2. Register it in `src/lib/themes.ts` with its name, modes, and three picker
-   swatches. A firm's theme is then pointed at by its `themeId` in
+   swatches, plus `firm: true` where the colors are a real firm's. A firm's
+   theme is then pointed at by its `themeId` in
    [`src/lib/accounts.ts`](src/lib/accounts.ts).
 3. Check the chart's profit, loss, and plan colors against the theme's card
    color: at least 3:1 contrast each, and far enough apart to tell under

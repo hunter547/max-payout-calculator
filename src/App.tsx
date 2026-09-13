@@ -33,7 +33,7 @@ import {
   scheduleFor,
   templateLabel,
   type AccountKey,
-  type Era,
+  type Terms,
 } from '@/lib/accounts'
 import {
   buildPlan,
@@ -61,6 +61,7 @@ import {
   deriveInputs,
   legacySetup,
   resolvePlan,
+  termsOf,
   toCuratedChoice,
   tradingDaysBind,
   type CuratedDraft,
@@ -68,6 +69,7 @@ import {
   type SetupDraft,
   type Snapshot,
 } from '@/lib/setup'
+import { FIRM_THEMES } from '@/lib/themes'
 
 const SNAPSHOT_DEFAULTS: Snapshot = {
   largestProfitDay: '',
@@ -79,7 +81,7 @@ const EMPTY_DRAFT: SetupDraft = {
   firmId: '',
   programId: '',
   templateId: '',
-  era: 'current',
+  terms: 'base',
   payoutsSoFar: '0',
   payoutBuffer: '',
   approach: null,
@@ -102,8 +104,13 @@ const STRATEGY_OPTIONS: { value: Strategy; label: string }[] = [
 const SEGMENT =
   'px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground'
 
-/** Every firm the app shows by name and logo, for the footer disclaimer. */
-const FIRM_NAMES = FIRMS.map((f) => f.name)
+/**
+ * Every firm the app names, whether it holds their accounts or only wears
+ * their colors, for the footer disclaimer.
+ */
+const FIRM_NAMES = [
+  ...new Set([...FIRMS.map((f) => f.name), ...FIRM_THEMES.map((t) => t.name)]),
+]
 const DISCLAIMER = `Not affiliated with or endorsed by ${
   FIRM_NAMES.length <= 2
     ? FIRM_NAMES.join(' or ')
@@ -283,10 +290,10 @@ export default function App() {
 
   const templateId = setup?.templateId ?? DEFAULT_TEMPLATE
   const template = accountTemplate(templateId)
-  const era: Era = setup?.era ?? 'current'
+  const terms: Terms = setup ? termsOf(setup) : 'base'
   const payoutsSoFar = setup?.payoutsSoFar ?? 0
   const payoutBuffer = setup?.payoutBuffer ?? defaultBuffer(template)
-  const schedule = scheduleFor(template, era)
+  const schedule = scheduleFor(template, terms)
   const approach = setup?.approach ?? 'dayByDay'
   // The payout count answers this where there is a schedule to count through,
   // so the switch below only appears where there is not.
@@ -374,20 +381,20 @@ export default function App() {
   /** A template brings its rules, and its firm brings the theme. */
   function applyTemplate(id: string) {
     const next = accountTemplate(id)
-    // A schedule is per account, so a new one starts on its current terms
-    // and on its own buffer, which scales with its drawdown.
-    const nextEra: Era = next.before ? era : 'current'
+    // A schedule is per account, so a new one starts on its usual terms and
+    // on its own buffer, which scales with its drawdown.
+    const nextTerms: Terms = next.alt ? terms : 'base'
     const nextBuffer = defaultBuffer(next)
     setSetup((prev) => ({
       ...(prev ?? { approach, payoutTaken, strategy, curated }),
       templateId: next.id,
-      era: nextEra,
+      terms: nextTerms,
       payoutsSoFar,
       payoutBuffer: nextBuffer,
     }))
     setRules((prev) => ({
       ...prev,
-      ...rulesFor(next, nextEra, payoutsSoFar, nextBuffer),
+      ...rulesFor(next, nextTerms, payoutsSoFar, nextBuffer),
       balance: prev.balance,
     }))
     appearance.setBrand(firmOf(next).themeId)
@@ -398,18 +405,18 @@ export default function App() {
    * where the trader is in it rewrites that rule.
    */
   function applySchedule(patch: {
-    era?: Era
+    terms?: Terms
     payoutsSoFar?: number
     payoutBuffer?: number
   }) {
-    const nextEra = patch.era ?? era
+    const nextTerms = patch.terms ?? terms
     const nextCount = patch.payoutsSoFar ?? payoutsSoFar
     const nextRoom = patch.payoutBuffer ?? payoutBuffer
     setSetup((prev) =>
       prev
         ? {
             ...prev,
-            era: nextEra,
+            terms: nextTerms,
             payoutsSoFar: nextCount,
             payoutBuffer: nextRoom,
           }
@@ -417,7 +424,7 @@ export default function App() {
     )
     setRules((prev) => ({
       ...prev,
-      ...rulesFor(template, nextEra, nextCount, nextRoom),
+      ...rulesFor(template, nextTerms, nextCount, nextRoom),
       balance: prev.balance,
     }))
   }
@@ -428,7 +435,7 @@ export default function App() {
     const room = Math.max(0, parseAmount(result.payoutBuffer))
     setSetup({
       templateId: next.id,
-      era: result.era,
+      terms: result.terms,
       payoutsSoFar: taken,
       payoutBuffer: room,
       approach: result.approach,
@@ -437,7 +444,7 @@ export default function App() {
       curated: result.curated,
     })
     setRules({
-      ...accountFor(next, result.era, taken, room),
+      ...accountFor(next, result.terms, taken, room),
       // A balance only gets typed once a payout has been taken; before that
       // it follows from the starting balance plus the profit since.
       balance: result.payoutTaken
@@ -469,7 +476,7 @@ export default function App() {
           firmId: firmOf(template).id,
           programId: template.programId,
           templateId,
-          era,
+          terms,
           payoutsSoFar: String(payoutsSoFar),
           payoutBuffer: String(payoutBuffer),
           approach: setup.approach,
@@ -676,12 +683,12 @@ export default function App() {
                 templateId={templateId}
                 onTemplateChange={applyTemplate}
                 schedule={{
-                  era,
+                  terms,
                   payoutsSoFar: String(payoutsSoFar),
                   payoutBuffer: String(payoutBuffer),
                   onChange: (patch) =>
                     applySchedule({
-                      era: patch.era,
+                      terms: patch.terms,
                       payoutsSoFar:
                         patch.payoutsSoFar === undefined
                           ? undefined
@@ -702,7 +709,7 @@ export default function App() {
                 onRestoreRules={() =>
                   setRules((prev) => ({
                     ...prev,
-                    ...rulesFor(template, era, payoutsSoFar, payoutBuffer),
+                    ...rulesFor(template, terms, payoutsSoFar, payoutBuffer),
                   }))
                 }
                 consistencyInvalid={consistencyInvalid}

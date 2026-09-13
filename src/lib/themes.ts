@@ -16,6 +16,11 @@ export interface BrandTheme {
   schemes: readonly Scheme[]
   /** Page, primary, accent: shown beside the name in the theme picker. */
   swatches: readonly [string, string, string]
+  /**
+   * Taken from a prop firm's own site, which is why the footer names it in
+   * the not-affiliated line whether or not its accounts are in the app yet.
+   */
+  firm?: boolean
 }
 
 export const BRAND_THEMES: readonly BrandTheme[] = [
@@ -30,14 +35,26 @@ export const BRAND_THEMES: readonly BrandTheme[] = [
     name: 'MyFundedFutures',
     schemes: ['dark'],
     swatches: ['#02040e', '#3a82f7', '#d8ae5e'],
+    firm: true,
   },
   {
     id: 'tradeify',
     name: 'Tradeify',
     schemes: ['dark'],
     swatches: ['#08080a', '#00ff51', '#efa22b'],
+    firm: true,
+  },
+  {
+    id: 'topstep',
+    name: 'Topstep',
+    schemes: ['dark'],
+    swatches: ['#000000', '#d5a161', '#1b2945'],
+    firm: true,
   },
 ]
+
+/** The firms the app dresses itself as, whether or not it holds their accounts. */
+export const FIRM_THEMES = BRAND_THEMES.filter((t) => t.firm)
 
 export const DEFAULT_BRAND = 'default'
 

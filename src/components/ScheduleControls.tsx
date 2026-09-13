@@ -8,6 +8,7 @@ import {
   consistencyFor,
   drawdownRoomAt,
   firmOf,
+  graduates,
   nextPayoutNumber,
   payoutCap,
   payoutThreshold,
@@ -16,7 +17,7 @@ import {
   roomIsThin,
   scheduleFor,
   type AccountTemplate,
-  type Era,
+  type Terms,
 } from '@/lib/accounts'
 import { formatPercent, formatRule } from '@/lib/format'
 import { parseAmount } from '@/lib/ledger'
@@ -24,12 +25,12 @@ import { cn } from '@/lib/utils'
 
 interface ScheduleControlsProps {
   template: AccountTemplate
-  era: Era
+  terms: Terms
   /** As typed, so a half-finished number doesn't jump the plan around. */
   payoutsSoFar: string
   /** Drawdown room the trader wants left after the payout, as typed. */
   payoutBuffer: string
-  onEraChange: (era: Era) => void
+  onTermsChange: (terms: Terms) => void
   onPayoutsChange: (payoutsSoFar: string) => void
   onBufferChange: (room: string) => void
   idPrefix: string
@@ -56,10 +57,10 @@ function Figure({ children }: { children: ReactNode }) {
  */
 export function ScheduleControls({
   template,
-  era,
+  terms,
   payoutsSoFar,
   payoutBuffer,
-  onEraChange,
+  onTermsChange,
   onPayoutsChange,
   onBufferChange,
   idPrefix,
@@ -67,13 +68,16 @@ export function ScheduleControls({
   invalid = false,
   className,
 }: ScheduleControlsProps) {
-  const cutoff = programOf(template).cutoff
+  const variant = programOf(template).variant
   const taken = Math.max(0, Math.floor(parseAmount(payoutsSoFar)))
-  const schedule = scheduleFor(template, era)
+  const schedule = scheduleFor(template, terms)
+  // Only worth asking how many payouts are behind you where something moves
+  // with the answer.
+  const counts = graduates(template.payout) || graduates(scheduleFor(template, 'alt'))
   const next = nextPayoutNumber(taken)
   const cap = payoutCap(schedule, taken)
   const goal = profitGoal(schedule, taken)
-  const consistency = consistencyFor(template, era, taken)
+  const consistency = consistencyFor(template, terms, taken)
   const risingConsistency = (schedule.consistencies?.length ?? 0) > 1
   const buffer = Math.max(0, parseAmount(payoutBuffer))
   const threshold = payoutThreshold(schedule, taken, buffer)
@@ -85,45 +89,46 @@ export function ScheduleControls({
 
   return (
     <div className={cn('grid gap-5', className)}>
-      {template.before && cutoff && (
+      {template.alt && variant && (
         <div className="grid gap-2">
-          <Label id={`${idPrefix}-era-label`}>When did you buy this account?</Label>
+          <Label id={`${idPrefix}-terms-label`}>{variant.question}</Label>
           <ToggleGroup
             type="single"
             variant="outline"
             size="sm"
-            value={era}
+            value={terms}
             onValueChange={(value) => {
-              if (value) onEraChange(value as Era)
+              if (value) onTermsChange(value as Terms)
             }}
             disabled={disabled}
-            aria-labelledby={`${idPrefix}-era-label`}
+            aria-labelledby={`${idPrefix}-terms-label`}
             className="w-fit"
           >
-            <ToggleGroupItem value="current" className={SEGMENT}>
-              On or after {cutoff.date}
+            <ToggleGroupItem value="base" className={SEGMENT}>
+              {variant.base}
             </ToggleGroupItem>
-            <ToggleGroupItem value="before" className={SEGMENT}>
-              Before it
+            <ToggleGroupItem value="alt" className={SEGMENT}>
+              {variant.alt}
             </ToggleGroupItem>
           </ToggleGroup>
           <p className="text-xs leading-snug text-muted-foreground">
-            The cutoff is {cutoff.date} at {cutoff.time}. Accounts bought before
-            it keep the older payout schedule.
+            {variant.note}
           </p>
         </div>
       )}
 
-      <MoneyField
-        id={`${idPrefix}-payouts`}
-        label="Payouts taken so far"
-        unit="payouts"
-        hint="On this account, since it was funded. Enter 0 if you have not taken one."
-        value={payoutsSoFar}
-        disabled={disabled}
-        invalid={invalid}
-        onChange={onPayoutsChange}
-      />
+      {counts && (
+        <MoneyField
+          id={`${idPrefix}-payouts`}
+          label="Payouts taken so far"
+          unit="payouts"
+          hint="On this account, since it was funded. Enter 0 if you have not taken one."
+          value={payoutsSoFar}
+          disabled={disabled}
+          invalid={invalid}
+          onChange={onPayoutsChange}
+        />
+      )}
 
       {/* The floor fails the account at or below it, so a payout that lands
           exactly on it has already breached. No firm publishes a cushion, so
@@ -140,11 +145,13 @@ export function ScheduleControls({
       )}
 
       <p className="text-sm leading-snug text-muted-foreground">
-        Payout {next} can be up to{' '}
+        {counts ? `Payout ${next}` : 'A payout'} can be up to{' '}
         <Figure>{formatRule(cap)}</Figure>
-        {capped && schedule.caps.length > 1
-          ? ', as can every one after it. '
-          : '. '}
+        {schedule.withdrawShare
+          ? `, and never more than ${formatPercent(schedule.withdrawShare)} of your balance. `
+          : capped && schedule.caps.length > 1
+            ? ', as can every one after it. '
+            : '. '}
         {goal > 0 && (
           <>
             It unlocks at <Figure>{formatRule(goal)}</Figure> of profit since

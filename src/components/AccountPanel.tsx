@@ -18,8 +18,8 @@ import {
   firmOf,
   hasSchedule,
   type AccountKey,
-  type Era,
   type RuleKey,
+  type Terms,
 } from '@/lib/accounts'
 import { formatCurrency } from '@/lib/format'
 import { balanceHint } from '@/lib/setup'
@@ -80,11 +80,11 @@ interface AccountPanelProps {
   onTemplateChange: (templateId: string) => void
   /** The payout schedule the account is on, and how far through it. */
   schedule: {
-    era: Era
+    terms: Terms
     payoutsSoFar: string
     payoutBuffer: string
     onChange: (patch: {
-      era?: Era
+      terms?: Terms
       payoutsSoFar?: string
       payoutBuffer?: string
     }) => void
@@ -170,10 +170,10 @@ export function AccountPanel({
       {hasSchedule(template) && (
         <ScheduleControls
           template={template}
-          era={schedule.era}
+          terms={schedule.terms}
           payoutsSoFar={schedule.payoutsSoFar}
           payoutBuffer={schedule.payoutBuffer}
-          onEraChange={(era) => schedule.onChange({ era })}
+          onTermsChange={(terms) => schedule.onChange({ terms })}
           onPayoutsChange={(payoutsSoFar) => schedule.onChange({ payoutsSoFar })}
           onBufferChange={(payoutBuffer) => schedule.onChange({ payoutBuffer })}
           idPrefix="account-schedule"

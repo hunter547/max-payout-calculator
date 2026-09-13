@@ -4,7 +4,7 @@ import {
   hasSchedule,
   sizesFor,
   type AccountKey,
-  type Era,
+  type Terms,
 } from '@/lib/accounts'
 import {
   curatedPlan,
@@ -36,8 +36,10 @@ export const CURATED_DEFAULT: CuratedDraft = { mode: 'days', days: null, cap: ''
 export interface Setup {
   /** The account template the rules came from. */
   templateId: string
-  /** Which payout schedule the account is on; missing on older saves. */
-  era?: Era
+  /** Which of the account type's two sets of terms it is on. */
+  terms?: Terms
+  /** What `terms` was called before types had more than a cutoff to differ by. */
+  era?: 'current' | 'before'
   /** Payouts already taken, which sets the next payout's cap. */
   payoutsSoFar?: number
   /** Payout buffer after a payout, where the floor breaches. */
@@ -66,8 +68,8 @@ export interface SetupDraft {
   programId: string
   /** The account size. Auto-filled when its type comes in only one. */
   templateId: string
-  /** Which payout schedule the account is on. */
-  era: Era
+  /** Which of the account type's two sets of terms it is on. */
+  terms: Terms
   /** Payouts already taken, as typed. */
   payoutsSoFar: string
   /** Payout buffer after a payout, as typed. */
@@ -175,6 +177,11 @@ export function tradingDaysBind(
   consistency: number,
 ): boolean {
   return minTradingDays > impliedTradingDays(consistency)
+}
+
+/** The terms a saved setup is on, reading what older saves called an era. */
+export function termsOf(setup: Pick<Setup, 'terms' | 'era'>): Terms {
+  return setup.terms ?? (setup.era === 'before' ? 'alt' : 'base')
 }
 
 /** Payouts already taken, as a number, from a draft's own typing. */

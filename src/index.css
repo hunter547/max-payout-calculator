@@ -5,6 +5,7 @@
 /* Firm typefaces: each only downloads while its theme is in use. */
 @import "@fontsource-variable/lexend/index.css";
 @import "@fontsource-variable/mona-sans/wdth.css";
+@import "@fontsource-variable/work-sans/index.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -237,6 +238,52 @@
 
 /* Archivo's width axis is the type system: expanded for headings, condensed
    and tabular for money. */
+/*
+  Theme: Topstep. Dark only, from topstep.com.
+    Black  #000000  page, which is what the site itself uses
+    Night  #0D1217  chart plate, cards (their night-500)
+    Gold   #D5A161  actions, and the daily cap line (their gold-400)
+    Navy   #1B2945  the slate their large sections sit on
+    Slate  #859098  secondary text (their slate-200)
+  Type: Work Sans, the site's body typeface. Its headings are set in
+  Paralucent, which is licensed and self-hosted, so Work Sans carries the
+  whole theme; it has no width axis, so the expanded/condensed utilities fall
+  back to its normal width, as with Lexend.
+  Gold is the brand's action color and takes --primary, but it is too light
+  for a filled bar and too close to the profit green under protanopia, so the
+  chart keeps the validated trio and gold marks only the labeled cap line.
+*/
+:root[data-brand='topstep'] {
+  color-scheme: dark;
+  --font-sans: "Work Sans Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #0d1217;
+  --card-foreground: #ffffff;
+  --popover: #141c22;
+  --popover-foreground: #ffffff;
+  --primary: #d5a161;
+  --primary-foreground: #1b1206;
+  --secondary: #10161d;
+  --secondary-foreground: #ffffff;
+  --muted: #10161d;
+  --muted-foreground: #859098;
+  --accent: #1b2945;
+  --accent-foreground: #ffffff;
+  --destructive: #d2463c;
+  --border: #293843;
+  --input: #334654;
+  --ring: #d5a161;
+
+  --profit: #2daa80;
+  --loss: #d2463c;
+  --plan: #4f7bf0;
+  --cap: #d5a161;
+  --grid: #141c22;
+  --axis: #334654;
+}
+
 @utility font-display {
   font-stretch: 116%;
   font-weight: 800;

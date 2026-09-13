@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { tradingDaysBind } from './setup'
 import { BRAND_THEMES } from './themes'
 import {
   accountFor,
@@ -12,6 +13,7 @@ import {
   defaultBuffer,
   DEFAULT_PAYOUT_BUFFER,
   drawdownRoomAt,
+  graduates,
   firmOf,
   roomIsThin,
   FIRMS,
@@ -26,6 +28,7 @@ import {
   scheduleFor,
   sizesFor,
   templateLabel,
+  type Terms,
 } from './accounts'
 
 describe('account templates', () => {
@@ -155,7 +158,7 @@ describe('account templates', () => {
 
     // Whatever the payout number, the default never warns about itself.
     for (const t of ACCOUNT_TEMPLATES) {
-      for (const era of ['current', 'before'] as const) {
+      for (const era of ['base', 'alt'] as const) {
         const schedule = scheduleFor(t, era)
         for (let n = 0; n < 8; n++) {
           const buffer = defaultBuffer(t)
@@ -187,25 +190,26 @@ describe('account templates', () => {
 
   it('keeps the older schedule for accounts bought before the cutoff', () => {
     const template = accountTemplate('tradeify-50k-growth')
-    expect(programOf(template).cutoff).toEqual({
-      date: 'September 12, 2025',
-      time: '8:00 AM EST',
+    expect(programOf(template).variant).toMatchObject({
+      question: 'When did you buy this account?',
+      base: 'On or after September 12, 2025',
+      alt: 'Before it',
     })
 
-    const before = scheduleFor(template, 'before')
+    const before = scheduleFor(template, 'alt')
     expect(before.caps).toEqual([1500, 1750, 2000, 2250, 2500, 3000, 25000])
     expect(before.qualifyingBalance).toBe(52100)
     // Its first payout qualifies $900 sooner than the current schedule.
     expect(payoutThreshold(before, 0)).toBe(52100)
-    expect(payoutThreshold(scheduleFor(template, 'current'), 0)).toBe(53000)
+    expect(payoutThreshold(scheduleFor(template, 'base'), 0)).toBe(53000)
     // From the seventh, a request can be anything up to $25,000.
     expect(payoutCap(before, 6)).toBe(25000)
     expect(payoutThreshold(before, 6, 0)).toBe(75100)
 
     // The 25k is not in the before-cutoff table; it has one schedule.
     const growth25k = accountTemplate('tradeify-25k-growth')
-    expect(growth25k.before).toBeUndefined()
-    expect(scheduleFor(growth25k, 'before')).toBe(growth25k.payout)
+    expect(growth25k.alt).toBeUndefined()
+    expect(scheduleFor(growth25k, 'alt')).toBe(growth25k.payout)
   })
 
   it('offers the schedule question only where it changes something', () => {
@@ -276,11 +280,11 @@ describe('account templates', () => {
       2000, 2000, 2000, 2500,
     ])
     // And the consistency rule tightens as the payouts add up.
-    expect([0, 1, 2, 9].map((n) => consistencyFor(template, 'current', n))).toEqual([
+    expect([0, 1, 2, 9].map((n) => consistencyFor(template, 'base', n))).toEqual([
       0.2, 0.25, 0.3, 0.3,
     ])
     // Accounts bought before the cutoff keep 20% throughout.
-    expect([0, 1, 9].map((n) => consistencyFor(template, 'before', n))).toEqual([
+    expect([0, 1, 9].map((n) => consistencyFor(template, 'alt', n))).toEqual([
       0.2, 0.2, 0.2,
     ])
     expect(hasSchedule(template)).toBe(true)
@@ -288,36 +292,92 @@ describe('account templates', () => {
 
   it('keeps the older profit goals for Lightning bought before the cutoff', () => {
     // The two larger sizes had a third, lower goal from the third payout on.
-    const goals = (id: string, era: 'current' | 'before') =>
-      [0, 1, 2, 3].map((n) => profitGoal(scheduleFor(accountTemplate(id), era), n))
+    const goals = (id: string, terms: Terms) =>
+      [0, 1, 2, 3].map((n) => profitGoal(scheduleFor(accountTemplate(id), terms), n))
 
-    expect(goals('tradeify-100k-lightning', 'current')).toEqual([
+    expect(goals('tradeify-100k-lightning', 'base')).toEqual([
       6000, 3500, 3500, 3500,
     ])
-    expect(goals('tradeify-100k-lightning', 'before')).toEqual([
+    expect(goals('tradeify-100k-lightning', 'alt')).toEqual([
       6000, 3000, 2500, 2500,
     ])
-    expect(goals('tradeify-150k-lightning', 'before')).toEqual([
+    expect(goals('tradeify-150k-lightning', 'alt')).toEqual([
       9000, 4500, 3000, 3000,
     ])
   })
 
   it('writes the payout number into the consistency rule as well', () => {
     const template = accountTemplate('tradeify-50k-lightning')
-    expect(rulesFor(template, 'current', 0)).toMatchObject({
+    expect(rulesFor(template, 'base', 0)).toMatchObject({
       profitGoal: '3000',
       consistency: '20',
       minTradingDays: '0',
     })
-    expect(rulesFor(template, 'current', 1)).toMatchObject({
+    expect(rulesFor(template, 'base', 1)).toMatchObject({
       profitGoal: '2000',
       consistency: '25',
     })
-    expect(rulesFor(template, 'current', 2).consistency).toBe('30')
-    expect(rulesFor(template, 'before', 2).consistency).toBe('20')
+    expect(rulesFor(template, 'base', 2).consistency).toBe('30')
+    expect(rulesFor(template, 'alt', 2).consistency).toBe('20')
     // Accounts whose rule never moves keep writing their own.
     expect(rulesFor(accountTemplate('tradeify-50k-growth')).consistency).toBe('35')
     expect(rulesFor(accountTemplate('mffu-50k-builder')).profitGoal).toBe('0')
+  })
+
+  it('carries the Topstep XFA Consistency rules', () => {
+    const sizes = [
+      ['topstep-50k-xfa-consistency', 3000, 6000],
+      ['topstep-100k-xfa-consistency', 4000, 8000],
+      ['topstep-150k-xfa-consistency', 6000, 12000],
+    ] as const
+
+    for (const [id, cap, withDll] of sizes) {
+      const template = accountTemplate(id)
+      expect(template).toMatchObject({
+        programId: 'topstep-xfa-consistency',
+        // An Express Funded Account counts profit up from zero.
+        startingBalance: 0,
+        consistency: 0.4,
+        minTradingDays: 3,
+        qualifyingDayProfit: 0,
+      })
+      expect(template.payout).toMatchObject({
+        caps: [cap],
+        minimumPayout: 125,
+        withdrawShare: 0.5,
+        floor: 0,
+      })
+      // A Daily Loss Limit added at checkout doubles the cap.
+      expect(template.alt?.caps).toEqual([withDll])
+
+      // Half the balance has to cover the cap, so the balance is twice it.
+      expect(payoutThreshold(template.payout, 0)).toBe(cap * 2)
+      expect(payoutThreshold(scheduleFor(template, 'alt'), 0)).toBe(withDll * 2)
+    }
+  })
+
+  it('asks the DLL question rather than a purchase date', () => {
+    const template = accountTemplate('topstep-50k-xfa-consistency')
+    expect(programOf(template).variant).toMatchObject({
+      question: 'Did you add a Daily Loss Limit?',
+      base: 'No DLL',
+      alt: 'DLL added',
+    })
+    // Two sets of terms, but nothing that moves with the payout number.
+    expect(hasSchedule(template)).toBe(true)
+    expect(graduates(template.payout)).toBe(false)
+    expect([0, 1, 5].map((n) => payoutCap(template.payout, n))).toEqual([
+      3000, 3000, 3000,
+    ])
+  })
+
+  it('never asks Topstep for trading days its consistency rule takes', () => {
+    // Three days at 40%: exactly what the rule forces on its own.
+    const template = accountTemplate('topstep-50k-xfa-consistency')
+    expect(template.minTradingDays).toBe(3)
+    expect(tradingDaysBind(template.minTradingDays, template.consistency)).toBe(
+      false,
+    )
   })
 
   it('falls back to the default for an unknown id', () => {
@@ -341,13 +401,13 @@ describe('account templates', () => {
     const template = accountTemplate('tradeify-50k-growth')
     // Three payouts taken, so the fourth is capped at $3,000, and the
     // default room keeps it off the floor.
-    expect(rulesFor(template, 'current', 3).payoutThreshold).toBe('53200')
-    expect(rulesFor(template, 'current', 3, 0).payoutThreshold).toBe('53100')
+    expect(rulesFor(template, 'base', 3).payoutThreshold).toBe('53200')
+    expect(rulesFor(template, 'base', 3, 0).payoutThreshold).toBe('53100')
     // The same account bought before the cutoff is on the older table.
-    expect(rulesFor(template, 'before', 0).payoutThreshold).toBe('52100')
-    expect(rulesFor(template, 'before', 5).payoutThreshold).toBe('53200')
+    expect(rulesFor(template, 'alt', 0).payoutThreshold).toBe('52100')
+    expect(rulesFor(template, 'alt', 5).payoutThreshold).toBe('53200')
     // Rules that do not depend on the schedule stay put.
-    expect(rulesFor(template, 'before', 5)).toMatchObject({
+    expect(rulesFor(template, 'alt', 5)).toMatchObject({
       startingBalance: '50000',
       consistency: '35',
       minTradingDays: '5',
@@ -368,8 +428,8 @@ describe('account templates', () => {
         const room = drawdownRoomAt(t.payout, n, payoutThreshold(t.payout, n))
         if (room !== null) expect(room).toBeGreaterThan(0)
       }
-      // A before-cutoff schedule needs a cutoff to go with it.
-      if (t.before) expect(programOf(t).cutoff).toBeDefined()
+      // A second schedule needs a question to tell the two apart.
+      if (t.alt) expect(programOf(t).variant).toBeDefined()
     }
   })
 

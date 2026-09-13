@@ -45,6 +45,7 @@ it('lists every theme and reports the one picked', () => {
     'Default',
     'MyFundedFutures',
     'Tradeify',
+    'Topstep',
   ])
   expect(items[0].getAttribute('aria-checked')).toBe('true')
 

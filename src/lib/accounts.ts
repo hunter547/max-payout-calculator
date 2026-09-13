@@ -11,6 +11,7 @@
  */
 
 import mffuLogo from '@/assets/brands/mffu.svg'
+import topstepLogo from '@/assets/brands/topstep.webp'
 import tradeifyLogo from '@/assets/brands/tradeify.svg'
 
 export interface Firm {
@@ -39,6 +40,12 @@ export const FIRMS: readonly Firm[] = [
     themeId: 'tradeify',
     logo: { src: tradeifyLogo, alt: 'Tradeify logo' },
   },
+  {
+    id: 'topstep',
+    name: 'Topstep',
+    themeId: 'topstep',
+    logo: { src: topstepLogo, alt: 'Topstep logo' },
+  },
 ]
 
 /** An account type, e.g. a MyFundedFutures Builder or a Tradeify Growth. */
@@ -48,11 +55,28 @@ export interface AccountProgram {
   /** The type's own name, without a size: "Builder", "Growth". */
   name: string
   /**
-   * When a firm changed a type's payout terms, accounts bought before the
-   * cutoff keep the old schedule. Only set where sizes carry a `before`
+   * Some accounts of a type are on a second set of terms — bought before a
+   * cutoff, or with an option added at checkout — and only the trader knows
+   * which. This is how to ask. Only set where its sizes carry an `alt`
    * schedule to go with it.
    */
-  cutoff?: { date: string; time: string }
+  variant?: {
+    /** The question itself: "When did you buy this account?" */
+    question: string
+    /** What to call each set of terms, on a two-way toggle. */
+    base: string
+    alt: string
+    /** The line under it, saying what actually differs. */
+    note: string
+  }
+}
+
+/** Tradeify changed both its types' terms on the same date. */
+const TRADEIFY_CUTOFF = {
+  question: 'When did you buy this account?',
+  base: 'On or after September 12, 2025',
+  alt: 'Before it',
+  note: 'The cutoff is September 12, 2025 at 8:00 AM EST. Accounts bought before it keep the older payout schedule.',
 }
 
 export const ACCOUNT_PROGRAMS: readonly AccountProgram[] = [
@@ -61,13 +85,24 @@ export const ACCOUNT_PROGRAMS: readonly AccountProgram[] = [
     id: 'tradeify-growth',
     firmId: 'tradeify',
     name: 'Growth',
-    cutoff: { date: 'September 12, 2025', time: '8:00 AM EST' },
+    variant: TRADEIFY_CUTOFF,
   },
   {
     id: 'tradeify-lightning',
     firmId: 'tradeify',
     name: 'Lightning',
-    cutoff: { date: 'September 12, 2025', time: '8:00 AM EST' },
+    variant: TRADEIFY_CUTOFF,
+  },
+  {
+    id: 'topstep-xfa-consistency',
+    firmId: 'topstep',
+    name: 'XFA Consistency',
+    variant: {
+      question: 'Did you add a Daily Loss Limit?',
+      base: 'No DLL',
+      alt: 'DLL added',
+      note: 'A Daily Loss Limit added at Trading Combine checkout doubles the payout cap. Added later, at activation or reactivation, it does not.',
+    },
   },
 ]
 
@@ -98,6 +133,12 @@ export interface PayoutSchedule {
   minimumPayout: number
   /** The balance a payout request needs at all, 0 where none is published. */
   qualifyingBalance: number
+  /**
+   * The share of the balance one request may take, where a firm caps it that
+   * way as well as in dollars: Topstep allows half. Reaching the dollar cap
+   * then needs a balance of cap / share.
+   */
+  withdrawShare?: number
   /** What has to remain afterwards. */
   floor: number
   /**
@@ -109,8 +150,8 @@ export interface PayoutSchedule {
   floorBreaches?: boolean
 }
 
-/** Which schedule an account is on: when it was bought decides. */
-export type Era = 'current' | 'before'
+/** Which of an account type's two sets of terms this account is on. */
+export type Terms = 'base' | 'alt'
 
 /** One size of one account type, with the rules that come with it. */
 export interface AccountTemplate {
@@ -140,8 +181,8 @@ export interface AccountTemplate {
    */
   drawdown?: number
   payout: PayoutSchedule
-  /** The schedule for accounts bought before the type's cutoff, if there is one. */
-  before?: PayoutSchedule
+  /** The second set of terms, where the type has one; see its `variant`. */
+  alt?: PayoutSchedule
 }
 
 export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
@@ -214,7 +255,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
       floor: 50100,
       floorBreaches: true,
     },
-    before: {
+    alt: {
       caps: [1500, 1750, 2000, 2250, 2500, 3000, 25000],
       minimumPayout: 500,
       qualifyingBalance: 52100,
@@ -238,7 +279,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
       floor: 100100,
       floorBreaches: true,
     },
-    before: {
+    alt: {
       caps: [2000, 2500, 3000, 3500, 4000, 5000, 25000],
       minimumPayout: 1000,
       qualifyingBalance: 103600,
@@ -262,7 +303,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
       floor: 150100,
       floorBreaches: true,
     },
-    before: {
+    alt: {
       caps: [2500, 3000, 3500, 4000, 4500, 5500, 25000],
       minimumPayout: 1500,
       qualifyingBalance: 155100,
@@ -289,7 +330,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
       floor: 25100,
       floorBreaches: true,
     },
-    before: {
+    alt: {
       caps: [1000],
       goals: [1500, 1000],
       // Accounts bought before the cutoff keep 20% for every payout.
@@ -319,7 +360,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
       floor: 50100,
       floorBreaches: true,
     },
-    before: {
+    alt: {
       caps: [2000, 2000, 2000, 2500],
       goals: [3000, 2000],
       // Accounts bought before the cutoff keep 20% for every payout.
@@ -349,7 +390,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
       floor: 100100,
       floorBreaches: true,
     },
-    before: {
+    alt: {
       caps: [2500, 2500, 2500, 3000],
       goals: [6000, 3000, 2500],
       // Accounts bought before the cutoff keep 20% for every payout.
@@ -379,7 +420,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
       floor: 150100,
       floorBreaches: true,
     },
-    before: {
+    alt: {
       caps: [3000, 3000, 3000, 3500],
       goals: [9000, 4500, 3000],
       // Accounts bought before the cutoff keep 20% for every payout.
@@ -388,6 +429,87 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
       qualifyingBalance: 0,
       floor: 150100,
       floorBreaches: true,
+    },
+  },
+  {
+    // An Express Funded Account is measured as profit above zero, and a
+    // request may take half of it, up to the cap. Its three trading days are
+    // what a 40% consistency rule takes anyway, so they never bind.
+    id: 'topstep-50k-xfa-consistency',
+    programId: 'topstep-xfa-consistency',
+    name: '50k',
+    startingBalance: 0,
+    consistency: 0.4,
+    minTradingDays: 3,
+    qualifyingDayProfit: 0,
+    payout: {
+      caps: [3000],
+      minimumPayout: 125,
+      qualifyingBalance: 0,
+      withdrawShare: 0.5,
+      floor: 0,
+    },
+    alt: {
+      // A Daily Loss Limit added at checkout doubles the cap.
+      caps: [6000],
+      minimumPayout: 125,
+      qualifyingBalance: 0,
+      withdrawShare: 0.5,
+      floor: 0,
+    },
+  },
+  {
+    // An Express Funded Account is measured as profit above zero, and a
+    // request may take half of it, up to the cap. Its three trading days are
+    // what a 40% consistency rule takes anyway, so they never bind.
+    id: 'topstep-100k-xfa-consistency',
+    programId: 'topstep-xfa-consistency',
+    name: '100k',
+    startingBalance: 0,
+    consistency: 0.4,
+    minTradingDays: 3,
+    qualifyingDayProfit: 0,
+    payout: {
+      caps: [4000],
+      minimumPayout: 125,
+      qualifyingBalance: 0,
+      withdrawShare: 0.5,
+      floor: 0,
+    },
+    alt: {
+      // A Daily Loss Limit added at checkout doubles the cap.
+      caps: [8000],
+      minimumPayout: 125,
+      qualifyingBalance: 0,
+      withdrawShare: 0.5,
+      floor: 0,
+    },
+  },
+  {
+    // An Express Funded Account is measured as profit above zero, and a
+    // request may take half of it, up to the cap. Its three trading days are
+    // what a 40% consistency rule takes anyway, so they never bind.
+    id: 'topstep-150k-xfa-consistency',
+    programId: 'topstep-xfa-consistency',
+    name: '150k',
+    startingBalance: 0,
+    consistency: 0.4,
+    minTradingDays: 3,
+    qualifyingDayProfit: 0,
+    payout: {
+      caps: [6000],
+      minimumPayout: 125,
+      qualifyingBalance: 0,
+      withdrawShare: 0.5,
+      floor: 0,
+    },
+    alt: {
+      // A Daily Loss Limit added at checkout doubles the cap.
+      caps: [12000],
+      minimumPayout: 125,
+      qualifyingBalance: 0,
+      withdrawShare: 0.5,
+      floor: 0,
     },
   },
 ]
@@ -484,17 +606,17 @@ export function templateLabel(template: AccountTemplate): string {
   return `${firmOf(template).name} ${accountLabel(template)}`
 }
 
-/** The schedule an account is on, falling back to the current one. */
+/** The schedule an account is on, falling back to its usual terms. */
 export function scheduleFor(
   template: AccountTemplate,
-  era: Era = 'current',
+  terms: Terms = 'base',
 ): PayoutSchedule {
-  return era === 'before' ? (template.before ?? template.payout) : template.payout
+  return terms === 'alt' ? (template.alt ?? template.payout) : template.payout
 }
 
 /** Whether the trader has anything to say about this account's schedule. */
 export function hasSchedule(template: AccountTemplate): boolean {
-  return graduates(template.payout) || template.before !== undefined
+  return graduates(template.payout) || template.alt !== undefined
 }
 
 /** The payout being worked towards: the one after those already taken. */
@@ -524,10 +646,10 @@ export function profitGoal(schedule: PayoutSchedule, payoutsSoFar: number): numb
 /** The consistency rule at that payout number, as a fraction. */
 export function consistencyFor(
   template: AccountTemplate,
-  era: Era = 'current',
+  terms: Terms = 'base',
   payoutsSoFar = 0,
 ): number {
-  const { consistencies } = scheduleFor(template, era)
+  const { consistencies } = scheduleFor(template, terms)
   return consistencies ? byPayout(consistencies, payoutsSoFar) : template.consistency
 }
 
@@ -563,10 +685,13 @@ export function payoutThreshold(
   payoutsSoFar: number,
   buffer = DEFAULT_PAYOUT_BUFFER,
 ): number {
+  const cap = payoutCap(schedule, payoutsSoFar)
   const keep = schedule.floorBreaches ? Math.max(0, buffer) : 0
   return Math.max(
     schedule.qualifyingBalance,
-    schedule.floor + payoutCap(schedule, payoutsSoFar) + keep,
+    schedule.floor + cap + keep,
+    // Half the balance has to cover the cap, so the balance is twice it.
+    schedule.withdrawShare ? cap / schedule.withdrawShare : 0,
   )
 }
 
@@ -585,11 +710,11 @@ export type AccountKey = 'balance' | RuleKey
 /** A template's rules as field values, on its schedule and payout number. */
 export function rulesFor(
   template: AccountTemplate,
-  era: Era = 'current',
+  terms: Terms = 'base',
   payoutsSoFar = 0,
   buffer = DEFAULT_PAYOUT_BUFFER,
 ): Record<RuleKey, string> {
-  const schedule = scheduleFor(template, era)
+  const schedule = scheduleFor(template, terms)
   return {
     startingBalance: String(template.startingBalance),
     payoutThreshold: String(payoutThreshold(schedule, payoutsSoFar, buffer)),
@@ -597,7 +722,7 @@ export function rulesFor(
     minimumPayout: String(schedule.minimumPayout),
     // Rounded because a fraction like 0.35 * 100 can land just off.
     consistency: String(
-      Math.round(consistencyFor(template, era, payoutsSoFar) * 10000) / 100,
+      Math.round(consistencyFor(template, terms, payoutsSoFar) * 10000) / 100,
     ),
     minTradingDays: String(template.minTradingDays),
     qualifyingDayProfit: String(template.qualifyingDayProfit),
@@ -607,12 +732,12 @@ export function rulesFor(
 /** A fresh account: the template's rules, with the balance at its start. */
 export function accountFor(
   template: AccountTemplate,
-  era: Era = 'current',
+  terms: Terms = 'base',
   payoutsSoFar = 0,
   buffer = DEFAULT_PAYOUT_BUFFER,
 ): Record<AccountKey, string> {
   return {
     balance: String(template.startingBalance),
-    ...rulesFor(template, era, payoutsSoFar, buffer),
+    ...rulesFor(template, terms, payoutsSoFar, buffer),
   }
 }

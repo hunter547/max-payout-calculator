@@ -196,11 +196,16 @@ describe('walkthrough', () => {
     const logos = Array.from(container.querySelectorAll('img')).map((img) =>
       img.getAttribute('alt'),
     )
-    expect(logos).toEqual(['MyFundedFutures logo', 'Tradeify logo'])
+    expect(logos).toEqual([
+      'MyFundedFutures logo',
+      'Tradeify logo',
+      'Topstep logo',
+    ])
     // One line per account type the firm offers.
     expect(text()).toContain('Builder: 2 sizes, 25k to 50k')
     expect(text()).toContain('Growth: 4 sizes, 25k to 150k')
     expect(text()).toContain('Lightning: 4 sizes, 25k to 150k')
+    expect(text()).toContain('XFA Consistency: 3 sizes, 50k to 150k')
   })
 
   it('asks for a firm before moving on', () => {
@@ -633,7 +638,7 @@ describe('walkthrough', () => {
     expect(byLabel('Balance for max payout').value).toBe('52100')
     expect(JSON.parse(window.localStorage.getItem('mpc.setup')!)).toMatchObject({
       templateId: 'tradeify-50k-growth',
-      era: 'before',
+      terms: 'alt',
       payoutsSoFar: 0,
     })
   })
@@ -709,6 +714,52 @@ describe('walkthrough', () => {
     // Two payouts in, the logged days no longer add up to the balance.
     expect(headline()).toBe('What’s your current balance?')
     expect(text()).not.toContain('Have you taken a payout')
+  })
+
+  it('asks Topstep whether a Daily Loss Limit was added', () => {
+    render()
+    choose('topstep')
+    press('Continue')
+    choose('topstep-xfa-consistency')
+    press('Continue')
+    choose('topstep-50k-xfa-consistency')
+    press('Continue')
+
+    // Nothing moves with the payout number here, so it is not asked for.
+    expect(headline()).toBe('How is this account set up?')
+    expect(container.querySelector('#walkthrough-schedule-payouts')).toBeNull()
+    expect(text()).toContain('Did you add a Daily Loss Limit?')
+
+    // Half the balance has to cover the cap, so it needs twice it.
+    expect(text()).toContain('A payout can be up to $3,000')
+    expect(text()).toContain('never more than 50% of your balance')
+    expect(text()).toContain('The balance it needs is $6,000')
+
+    press('DLL added')
+    expect(text()).toContain('A payout can be up to $6,000')
+    expect(text()).toContain('The balance it needs is $12,000')
+
+    press('Continue')
+    choose('pointInTime')
+    press('Continue')
+    type(byLabel('Largest profit day'), '900')
+    press('Continue')
+    type(byLabel('Cumulative profit'), '3000')
+    press('Continue')
+    choose('conservative')
+    press('Show my plan')
+
+    // The rules came from the DLL schedule, and a 40% rule takes three days
+    // anyway, so its three-day minimum was never asked about.
+    expect(byLabel('Balance for max payout').value).toBe('12000')
+    expect(byLabel('Minimum payout').value).toBe('125')
+    expect(byLabel('Consistency rule').value).toBe('40')
+    expect(container.querySelector('#snapshot-days')).toBeNull()
+    expect(document.documentElement.dataset.brand).toBe('topstep')
+    expect(JSON.parse(window.localStorage.getItem('mpc.setup')!)).toMatchObject({
+      templateId: 'topstep-50k-xfa-consistency',
+      terms: 'alt',
+    })
   })
 
   it('skips the walkthrough for data saved before it existed', () => {
@@ -985,8 +1036,9 @@ describe('color themes', () => {
 
     const footer = container.querySelector('footer')?.textContent
     expect(footer).toContain('Your entries are saved in this browser only.')
+    // Named whether the app holds their accounts or only wears their colors.
     expect(footer).toContain(
-      'Not affiliated with or endorsed by MyFundedFutures or Tradeify.',
+      'Not affiliated with or endorsed by MyFundedFutures, Tradeify, or Topstep.',
     )
   })
 })
