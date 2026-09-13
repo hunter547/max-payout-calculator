@@ -3,7 +3,8 @@
  * "MyFundedFutrures 50k Builder Max Payout Calculator.xlsx" (Sheet1), then
  * generalised so other firms' account rules fit the same shape:
  *
- *   E3 Minimum target net profit   =MAX(minimum payout, profit goal, payout threshold - balance)
+ *   E3 Minimum target net profit   =MAX(minimum payout, profit goal,
+ *                                        net profit + (threshold - balance))
  *   H3 Minimum net profit required =MAX(E3, ABS(largest day) / consistency)
  *   I3 Remaining profit needed     =H3 - net profit
  *   J3 Minimum trading days left   =CEILING.MATH(I3 / (H3 * consistency))
@@ -107,10 +108,16 @@ export function calculate(inputs: CalcInputs): CalcResults {
 
   // E3 =MAX(minimum payout, threshold - balance), widened by the profit a
   // firm wants earned since the last payout where it sets one.
+  //
+  // The balance term is a shortfall, but E3 is a total: I3 below takes the
+  // profit already made off it. The balance already counts that profit, so
+  // the shortfall has to be added back onto it, or it comes off twice. The
+  // sheet did it the other way and got away with it only because its own row
+  // sat above the threshold, leaving the minimum payout to set the floor.
   const minimumTargetNetProfit = Math.max(
     minimumPayout,
     profitGoal,
-    payoutThreshold - balance,
+    currentNetProfit + (payoutThreshold - balance),
   )
 
   // H3 =MAX(E3, ABS(D3)/G3).  Excel yields #DIV/0! at G3=0; we fall back to the

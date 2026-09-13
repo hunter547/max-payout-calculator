@@ -42,10 +42,13 @@ describe('calculate — parity with the spreadsheet', () => {
   })
 
   it('takes the payout-shortfall branch of E3 when it exceeds the minimum payout', () => {
-    // 4100 - 1000 = 3100, which beats the 500 floor.
+    // 4100 - 1000 = 3100 of balance still to make, which beats the 500 floor.
     const r = calculate({ ...SHEET_INPUTS, balance: 1000 })
-    expect(r.minimumTargetNetProfit).toBe(3100)
-    expect(r.minimumNetProfitRequired).toBe(3100) // 359/0.5 = 718 loses the MAX
+    // On top of the $6.60 already made, since the balance counts that too.
+    expect(r.minimumTargetNetProfit).toBe(3106.6)
+    expect(r.minimumNetProfitRequired).toBe(3106.6) // 359/0.5 = 718 loses the MAX
+    // And the plan closes exactly the $3,100 the balance is short.
+    expect(r.remainingProfitNeeded).toBeCloseTo(3100, 9)
   })
 
   it('takes the consistency branch of H3 when the largest day dominates', () => {
@@ -105,6 +108,68 @@ describe('consistency guardrail', () => {
     for (const consistencyRequirement of [0.1, 0.2, 0.25, 0.3, 0.5, 0.8, 1]) {
       const r = calculate({ ...SHEET_INPUTS, consistencyRequirement })
       expect(r.dailyTargetWithinConsistency).toBe(true)
+    }
+  })
+})
+
+describe('the balance a payout needs', () => {
+  /**
+   * A Topstep 50k XFA Consistency with a Daily Loss Limit: the balance counts
+   * profit up from zero, and half of it has to cover the $6,000 cap, so it
+   * takes $12,000. One day of $2,269.32 is behind it.
+   */
+  const topstep: CalcInputs = {
+    balance: 2269.32,
+    payoutThreshold: 12000,
+    minimumPayout: 125,
+    profitGoal: 0,
+    largestProfitDay: 2269.32,
+    currentNetProfit: 2269.32,
+    consistencyRequirement: 0.4,
+    minTradingDays: 3,
+    tradingDaysSoFar: 1,
+    qualifyingDayProfit: 0,
+  }
+
+  it('plans to the balance itself, not to the balance less the profit', () => {
+    const r = calculate(topstep)
+    // The shortfall is $9,730.68 on top of the $2,269.32 already made.
+    expect(r.minimumTargetNetProfit).toBe(12000)
+    expect(r.remainingProfitNeeded).toBeCloseTo(9730.68, 9)
+
+    const plan = planFor(topstep, r, 'conservative')
+    expect(plan.days).toBe(3)
+    expect(plan.dailyProfit).toBeCloseTo(3243.56, 2)
+
+    // Which is the point: the plan has to land on the balance it named.
+    const balance = topstep.balance + plan.days * plan.dailyProfit
+    expect(balance).toBeCloseTo(12000, 6)
+    expect(pays(topstep, plan.days, plan.dailyProfit)).toBe(true)
+  })
+
+  it('lands on the balance for every plan across a sweep', () => {
+    for (const balance of [0, 250.75, 2269.32, 6000]) {
+      for (const payoutThreshold of [6000, 12000, 24000]) {
+        for (const largestProfitDay of [0, 900, 2269.32]) {
+          for (const consistencyRequirement of [0.2, 0.4, 0.5]) {
+            const inputs: CalcInputs = {
+              ...topstep,
+              balance,
+              payoutThreshold,
+              largestProfitDay,
+              consistencyRequirement,
+              // Before a payout the balance is the profit itself.
+              currentNetProfit: balance,
+            }
+            const r = calculate(inputs)
+            if (r.targetMet) continue
+            for (const strategy of ['conservative', 'aggressive'] as const) {
+              const plan = planFor(inputs, r, strategy)
+              expect(pays(inputs, plan.days, plan.dailyProfit)).toBe(true)
+            }
+          }
+        }
+      }
     }
   })
 })
@@ -260,7 +325,13 @@ describe('minimum trading days', () => {
   })
 
   it('leaves days to trade when the profit is there but the days are not', () => {
-    const met = { ...growth, currentNetProfit: 5000, tradingDaysSoFar: 2 }
+    // Balance past the threshold, and the profit that took it there.
+    const met = {
+      ...growth,
+      balance: 26600,
+      currentNetProfit: 1600,
+      tradingDaysSoFar: 2,
+    }
     const r = calculate(met)
     expect(r.targetMet).toBe(true)
     expect(r.payoutReady).toBe(false)
@@ -273,7 +344,12 @@ describe('minimum trading days', () => {
   })
 
   it('is done when both the profit and the days are covered', () => {
-    const done = { ...growth, currentNetProfit: 5000, tradingDaysSoFar: 5 }
+    const done = {
+      ...growth,
+      balance: 26600,
+      currentNetProfit: 1600,
+      tradingDaysSoFar: 5,
+    }
     const r = calculate(done)
     expect(r.payoutReady).toBe(true)
     expect(planFor(done, r, 'conservative').days).toBe(0)
@@ -283,12 +359,16 @@ describe('minimum trading days', () => {
 /** Direct check of the rules a plan has to satisfy on final totals. */
 function pays(inputs: CalcInputs, n: number, x: number): boolean {
   const total = inputs.currentNetProfit + n * x
-  const target = Math.max(inputs.minimumPayout, inputs.payoutThreshold - inputs.balance)
+  const balance = inputs.balance + n * x
   const largest = Math.max(Math.abs(inputs.largestProfitDay), x)
   const enoughDays = n >= Math.max(0, inputs.minTradingDays - inputs.tradingDaysSoFar)
   return (
     enoughDays &&
-    total >= target - 1e-6 &&
+    // The balance carries the payout, and the profit has to clear whatever
+    // the firm wants earned since the last one.
+    balance >= inputs.payoutThreshold - 1e-6 &&
+    total >= inputs.minimumPayout - 1e-6 &&
+    total >= inputs.profitGoal - 1e-6 &&
     largest <= inputs.consistencyRequirement * total + 1e-6
   )
 }

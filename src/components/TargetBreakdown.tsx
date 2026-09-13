@@ -44,7 +44,7 @@ export function TargetBreakdown({
       note:
         results.minimumTargetNetProfit === inputs.minimumPayout
           ? `The ${formatCurrency(inputs.minimumPayout)} minimum payout.`
-          : `${formatCurrency(inputs.payoutThreshold)} needed for a max payout, less your balance.`,
+          : `What takes your balance to the ${formatCurrency(inputs.payoutThreshold)} a max payout needs.`,
     },
     {
       label: 'Profit required',

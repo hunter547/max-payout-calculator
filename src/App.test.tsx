@@ -493,8 +493,9 @@ describe('walkthrough', () => {
     choose('conservative')
     press('Show my plan')
 
-    // Balance = $0 start + $6.60: target 4100 - 6.6 = 4093.40 over 2 days.
-    expect(headline()).toBe('Two more trading days at $2,043.40 each')
+    // Balance = $0 start + $6.60, and $4,100 is what it has to reach, so the
+    // two days close the $4,093.40 between them.
+    expect(headline()).toBe('Two more trading days at $2,046.70 each')
     expect(text()).toContain('Starting balance plus your logged days')
   })
 

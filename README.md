@@ -371,7 +371,7 @@ to count**.
 
 | Cell | Name | Formula |
 |------|------|---------|
-| `E3` | Minimum target net profit | `=MAX(minimum payout, threshold - A3)` |
+| `E3` | Minimum target net profit | `=MAX(minimum payout, profit goal, F3 + (threshold - A3))` |
 | `H3` | Minimum net profit required | `=MAX(E3, ABS(D3)/G3)` |
 | `I3` | Remaining profit needed | `=H3-F3` |
 | `J3` | Minimum trading days left | `=CEILING.MATH(I3/(H3*G3))` |
@@ -430,8 +430,9 @@ usually agree, and the walkthrough says so when they do.
 
 ### Deliberate differences from the spreadsheet
 
-The sheet leaves three situations as raw Excel errors. The app handles them
-instead, and the tests pin each one:
+The sheet leaves three situations as raw Excel errors, and states `E3` in a way
+that only works when the balance is already past the threshold. The app handles
+all four, and the tests pin each one:
 
 1. **Target already met** (`I3 <= 0`). The sheet gives `K3 = #DIV/0!`. The app
    shows "Payout ready", or the trading days still to go.
@@ -441,6 +442,24 @@ instead, and the tests pin each one:
    digits; IEEE 754 doesn't, so a ratio of exactly `2` can land on
    `2.0000000000000004` and round up to `3`. The port settles the ratio to 12
    significant digits first.
+4. **The balance shortfall counted twice.** The sheet writes `E3` as
+   `MAX(500, (B3+C3)-A3)` — a *shortfall* — but `I3 = H3 - F3` then takes the
+   profit already made off it, and the balance in `A3` already counts that
+   profit. Subtracting it twice leaves a plan that stops short of the balance
+   it was aiming at. The sheet never showed it, because its own row sat above
+   the threshold and the $500 floor took over.
+
+   It shows plainly on an account whose balance starts at $0. A Topstep 50k
+   with a Daily Loss Limit needs $12,000; one day of $2,269.32 in, the sheet's
+   `E3` asks for $9,730.68 of profit, so the plan lands on $9,730.68 — still
+   $2,269.32 short. The app adds the shortfall to the profit already made, so
+   `E3` is the $12,000 it actually has to reach, and three days of $3,243.56
+   land on it exactly.
+
+   `pays()` in the tests is written from the payout's own terms — the balance
+   reaches the threshold, the profit clears the minimum and any goal, the
+   consistency rule holds — rather than from `E3`, so it can catch this rather
+   than restate it.
 
 ## Design
 
@@ -487,6 +506,8 @@ in `src/lib/utils.ts`. If the CLI installs `cn` into `package.json`, remove it.
   search confirms no daily amount gets there a day sooner. Across the same
   sweep, curated reproduces conservative at the conservative cap, and every
   day count from the fastest up pays out without asking for more per day.
+  A sweep over balances, thresholds, largest days and consistency rules
+  checks that every plan lands on the balance it named.
   Minimum trading days are covered too: plans stretch to the firm's minimum,
   every planned day clears the profit bar that makes it count, and a cap under
   that bar is turned down.
