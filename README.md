@@ -8,9 +8,12 @@ Pick your prop firm, account type and size, and the firm's rules fill in for
 you. MyFundedFutures and Tradeify accounts ship with the app; see
 [Account templates](#account-templates).
 
-The calculations are ported from
-`MyFundedFutrures 50k Builder Max Payout Calculator.xlsx`, whose account is the
-app's default template.
+The calculations began as a cell-for-cell port of a MyFundedFutures 50k
+Builder spreadsheet, whose account is still the app's default template. That
+workbook is no longer kept here: the app covers rules it never had, and in
+four places the sheet was simply wrong — see [Deliberate differences from the
+spreadsheet](#deliberate-differences-from-the-spreadsheet), which the tests
+pin so the port cannot drift back.
 
 ## Running it
 
