@@ -1,8 +1,9 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeftRight, Moon, Sun } from 'lucide-react'
+import { ArrowLeftRight, Moon, PartyPopper, Sun } from 'lucide-react'
 import { AccountPanel, type BalanceDisplay } from '@/components/AccountPanel'
 import { CuratedControls } from '@/components/CuratedControls'
 import { Ledger } from '@/components/Ledger'
+import { PayoutFlow, type PayoutResult } from '@/components/PayoutFlow'
 import { PnlChart, type ChartBar } from '@/components/PnlChart'
 import { SnapshotPanel } from '@/components/SnapshotPanel'
 import { TargetBreakdown } from '@/components/TargetBreakdown'
@@ -273,6 +274,7 @@ export default function App() {
   )
   const [days, setDays] = usePersistentState<DayEntry[]>('mpc.days', [])
   const [reconfiguring, setReconfiguring] = useState(false)
+  const [takingPayout, setTakingPayout] = useState(false)
   // The account picked in the walkthrough, before anything is saved, and the
   // theme that was showing before it moved.
   const [draftTemplate, setDraftTemplate] = useState<string | null>(null)
@@ -429,6 +431,27 @@ export default function App() {
     }))
   }
 
+  /**
+   * A payout ends the cycle it came from: it comes off the balance, the days
+   * and profit behind it are cleared, and the next payout's own terms take
+   * over, which can move the target and the consistency rule with it.
+   */
+  function finishPayout(result: PayoutResult) {
+    const taken = payoutsSoFar + 1
+    setSetup((prev) =>
+      prev ? { ...prev, payoutsSoFar: taken, payoutTaken: true } : prev,
+    )
+    setRules((prev) => ({
+      ...prev,
+      ...rulesFor(template, terms, taken, payoutBuffer),
+      balance: String(result.balance),
+    }))
+    setDays(result.days)
+    setSnapshot(result.snapshot)
+    setTakingPayout(false)
+    document.documentElement.scrollTop = 0
+  }
+
   function finishWalkthrough(result: WalkthroughResult) {
     const next = accountTemplate(result.templateId)
     const taken = Math.max(0, Math.floor(parseAmount(result.payoutsSoFar)))
@@ -465,6 +488,26 @@ export default function App() {
     setDraftTemplate(null)
     brandBeforeDraft.current = null
     document.documentElement.scrollTop = 0
+  }
+
+  if (setup !== null && takingPayout) {
+    return (
+      <TooltipProvider delayDuration={200}>
+        <div className="mx-auto max-w-6xl px-4 sm:px-8">
+          <AppHeader appearance={appearance} account={templateLabel(template)} />
+          <PayoutFlow
+            templateId={templateId}
+            terms={terms}
+            payoutsSoFar={payoutsSoFar}
+            approach={approach}
+            balance={inputs.balance}
+            loggedDays={approach === 'dayByDay' ? days.length : 0}
+            onFinish={finishPayout}
+            onCancel={() => setTakingPayout(false)}
+          />
+        </div>
+      </TooltipProvider>
+    )
   }
 
   if (setup === null || reconfiguring) {
@@ -596,6 +639,15 @@ export default function App() {
             <p className="mt-5 max-w-[62ch] text-base text-muted-foreground sm:text-lg">
               {detail}
             </p>
+
+            {/* The one thing to do from here, once there is nothing left to
+                trade for. */}
+            {results.payoutReady && (
+              <Button size="lg" className="mt-6" onClick={() => setTakingPayout(true)}>
+                <PartyPopper />
+                Payout taken
+              </Button>
+            )}
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <span id="strategy-label" className="text-sm font-medium">

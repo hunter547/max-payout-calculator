@@ -946,6 +946,110 @@ describe('day-by-day dashboard', () => {
     expect(container.querySelector('#account-balance')).toBeNull()
   })
 
+  it('offers to take the payout only once one is ready', () => {
+    render()
+    // Mid-cycle: nothing to take yet.
+    addDay('2026-09-08', '100')
+    expect(
+      Array.from(container.querySelectorAll('button')).some(
+        (b) => b.textContent?.trim() === 'Payout taken',
+      ),
+    ).toBe(false)
+
+    type(byLabel('P&L on Sep 8'), '400')
+    addDay('2026-09-09', '400')
+    expect(headline()).toBe('Payout ready')
+    press('Payout taken')
+    expect(headline()).toBe('Congratulations on taking a payout!')
+  })
+
+  it('takes the payout off the balance and clears the cycle behind it', () => {
+    render()
+    addDay('2026-09-08', '400')
+    addDay('2026-09-09', '400')
+    press('Payout taken')
+
+    // The most this one allows: the $2,000 cap, which the balance can spare.
+    expect(byLabel('Payout amount').value).toBe('2000')
+    press('Continue')
+
+    expect(headline()).toBe('Does this look correct?')
+    expect(text()).toContain('$4,758.34') // balance before
+    expect(text()).toContain('−$2,000.00') // the payout
+    expect(text()).toContain('$2,758.34') // balance now
+    expect(text()).toContain('Your 2 logged days will be cleared')
+    press('Continue')
+
+    expect(headline()).toBe('Have you made any profit since taking the payout?')
+    choose('no')
+    press('Start the next cycle')
+
+    // Back on the dashboard, counting from the new balance with nothing
+    // logged: $4,100 - $2,758.34 over two days.
+    expect(headline()).toBe('Two more trading days at $670.83 each')
+    expect(ledgerRows()).toHaveLength(0)
+    expect(byLabel('Current balance').value).toBe('2758.34')
+    expect(JSON.parse(window.localStorage.getItem('mpc.setup')!)).toMatchObject({
+      payoutsSoFar: 1,
+      payoutTaken: true,
+    })
+    expect(JSON.parse(window.localStorage.getItem('mpc.days')!)).toEqual([])
+  })
+
+  it('turns down a payout bigger than the one allowed', () => {
+    render()
+    addDay('2026-09-08', '400')
+    addDay('2026-09-09', '400')
+    press('Payout taken')
+
+    type(byLabel('Payout amount'), '2500')
+    press('Continue')
+    expect(headline()).toBe('Congratulations on taking a payout!')
+    expect(text()).toContain('more than the $2,000.00 this payout allows')
+
+    // And under the firm's minimum is no good either.
+    type(byLabel('Payout amount'), '100')
+    press('Continue')
+    expect(text()).toContain('pays out $500.00 at the least')
+
+    type(byLabel('Payout amount'), '1500')
+    press('Continue')
+    expect(headline()).toBe('Does this look correct?')
+    expect(text()).toContain('$3,258.34') // 4758.34 - 1500
+  })
+
+  it('keeps the days logged since the payout', () => {
+    render()
+    addDay('2026-09-08', '400')
+    addDay('2026-09-09', '400')
+    press('Payout taken')
+    press('Continue')
+    press('Continue')
+    choose('yes')
+    press('Continue')
+
+    expect(headline()).toBe('Log each trading day')
+    addDay('2026-09-15', '250')
+    press('Start the next cycle')
+
+    // The new cycle starts from the new balance, with that one day in it.
+    expect(ledgerRows()).toHaveLength(1)
+    expect(text()).toContain('+$250.00')
+    expect(byLabel('Current balance').value).toBe('2758.34')
+  })
+
+  it('backs out of the payout flow without changing anything', () => {
+    render()
+    addDay('2026-09-08', '400')
+    addDay('2026-09-09', '400')
+    press('Payout taken')
+    press('Not yet, go back')
+
+    expect(headline()).toBe('Payout ready')
+    expect(ledgerRows()).toHaveLength(2)
+    expect(byLabel('Current balance').value).toBe('4758.34')
+  })
+
   it('shows no spreadsheet cell references or formulas', () => {
     render()
     addDay('2026-09-08', '359')

@@ -662,6 +662,23 @@ export function graduates(schedule: PayoutSchedule): boolean {
   )
 }
 
+/**
+ * The most this payout may actually be: the firm's cap, whatever share of the
+ * balance it allows, and never more than the balance has above its floor.
+ */
+export function maxPayoutFor(
+  schedule: PayoutSchedule,
+  payoutsSoFar: number,
+  balance: number,
+): number {
+  const limits = [
+    payoutCap(schedule, payoutsSoFar),
+    balance - schedule.floor,
+    ...(schedule.withdrawShare ? [balance * schedule.withdrawShare] : []),
+  ]
+  return Math.max(0, Math.round(Math.min(...limits) * 100) / 100)
+}
+
 /** How much room a payout of that size leaves above a breaching floor. */
 export function drawdownRoomAt(
   schedule: PayoutSchedule,

@@ -18,6 +18,7 @@ import {
   roomIsThin,
   FIRMS,
   hasSchedule,
+  maxPayoutFor,
   nextPayoutNumber,
   payoutCap,
   payoutThreshold,
@@ -378,6 +379,25 @@ describe('account templates', () => {
     expect(tradingDaysBind(template.minTradingDays, template.consistency)).toBe(
       false,
     )
+  })
+
+  it('says the most a payout may actually be', () => {
+    // A Builder: the cap, unless the balance cannot spare it above the buffer.
+    const builder = accountTemplate('mffu-50k-builder').payout
+    expect(maxPayoutFor(builder, 0, 4758.34)).toBe(2000)
+    expect(maxPayoutFor(builder, 0, 3500)).toBe(1400) // 3500 - the 2100 buffer
+    expect(maxPayoutFor(builder, 0, 2100)).toBe(0)
+
+    // Topstep also caps it at half the balance.
+    const topstep = accountTemplate('topstep-50k-xfa-consistency').payout
+    expect(maxPayoutFor(topstep, 0, 12000)).toBe(3000) // the cap
+    expect(maxPayoutFor(topstep, 0, 4000)).toBe(2000) // half the balance
+    expect(maxPayoutFor(scheduleFor(accountTemplate('topstep-50k-xfa-consistency'), 'alt'), 0, 12000)).toBe(6000)
+
+    // And a graduated cap follows the payout number.
+    const growth = accountTemplate('tradeify-50k-growth').payout
+    expect(maxPayoutFor(growth, 0, 53000)).toBe(1500)
+    expect(maxPayoutFor(growth, 3, 53600)).toBe(3000)
   })
 
   it('falls back to the default for an unknown id', () => {

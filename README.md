@@ -130,6 +130,34 @@ Everything is saved in your browser's `localStorage` (`mpc.setup`, which also
 holds the payout schedule, plus `mpc.rules`, `mpc.snapshot`, `mpc.days` and
 `mpc.theme`). Nothing is sent anywhere.
 
+## Taking a payout
+
+Once the dashboard says **Payout ready** there is nothing left to plan, so it
+offers the one thing left to do: a **Payout taken** button under the headline,
+which opens a short sequence of its own
+([`PayoutFlow.tsx`](src/components/PayoutFlow.tsx)).
+
+1. **Congratulations on taking a payout!** — with confetti, and a field for what
+   you withdrew. It starts at the most this payout allows and will not take
+   more, or less than the firm's minimum.
+2. **Does this look correct?** — the balance before, the payout, and the balance
+   the next cycle starts from, plus what is about to be cleared.
+3. **Have you made any profit since taking the payout?**
+4. If so, **log each trading day** (or, point-in-time, the numbers since).
+
+Finishing it takes the payout off the balance, clears the days and profit behind
+it, and counts the payout — which on a graduated schedule moves the cap, the
+target and the consistency rule to the next payout's own terms. "Not yet, go
+back" leaves everything as it was.
+
+`maxPayoutFor(schedule, payoutsSoFar, balance)` is what the first screen caps
+at: the firm's cap, whatever share of the balance it allows, and never more
+than the balance has above its floor.
+
+The confetti is [canvas-confetti](https://www.npmjs.com/package/canvas-confetti)
+in the theme's own colors, imported on demand so it stays out of the main
+bundle, and skipped for anyone whose system asks for reduced motion.
+
 ## Account templates
 
 [`src/lib/accounts.ts`](src/lib/accounts.ts) holds three registries, one per
@@ -528,6 +556,8 @@ in `src/lib/utils.ts`. If the CLI installs `cn` into `package.json`, remove it.
   to the workbook's `$355.70` a day, covers picking a firm (the theme follows
   at once), then a type and a size (their rules follow), the size screen
   offering only that type's sizes and being skipped when there is only one,
+  the payout flow (what a payout may be, the balance it leaves, the cycle it
+  clears, the days logged after it, and backing out of it),
   the payout schedule screen (the cap, balance and room left for a later
   payout, the warning a cut buffer earns, and an account bought before the
   cutoff) and its absence on a flat schedule,
