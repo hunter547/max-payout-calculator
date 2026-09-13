@@ -23,6 +23,7 @@ import {
   maxPayoutFor,
   nextPayoutNumber,
   payoutCap,
+  payoutsSpent,
   payoutThreshold,
   profitGoal,
   programOf,
@@ -212,6 +213,26 @@ describe('account templates', () => {
     // taken to hold and the higher of the two wins.
     expect(50100 + 500 + buffer).toBeLessThan(52600)
     expect(payoutThreshold(schedule, 5, buffer)).toBe(52600)
+  })
+
+  it('ends an Apex EOD or Intraday account after its sixth payout', () => {
+    const eod = accountTemplate('apex-50k-eod').payout
+    expect(eod.maxPayouts).toBe(6)
+    expect(payoutsSpent(eod, 4)).toBe(false)
+    // Five taken, so the sixth is still to come.
+    expect(payoutsSpent(eod, 5)).toBe(false)
+    expect(payoutsSpent(eod, 6)).toBe(true)
+
+    // Legacy carries on instead: Apex stops capping rather than closing it.
+    const legacy = accountTemplate('apex-50k-legacy').payout
+    expect(legacy.maxPayouts).toBeUndefined()
+    expect(payoutsSpent(legacy, 9)).toBe(false)
+    // And nothing else in the registry ends on a count.
+    for (const t of ACCOUNT_TEMPLATES) {
+      if (!t.programId.startsWith('apex-')) {
+        expect(t.payout.maxPayouts).toBeUndefined()
+      }
+    }
   })
 
   it('lets the Apex legacy consistency rule lapse after six payouts', () => {

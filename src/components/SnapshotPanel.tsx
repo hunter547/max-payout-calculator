@@ -10,6 +10,8 @@ interface SnapshotPanelProps {
   /** Profit a day must beat to count, where the firm sets one. */
   qualifyingDayProfit: number
   inclusiveBar?: boolean
+  /** Whether there is still a payout to plan for; see `payoutsSpent`. */
+  spent?: boolean
   /** False where the firm's minimum is one the consistency rule reaches. */
   asksTradingDays: boolean
 }
@@ -22,6 +24,7 @@ export function SnapshotPanel({
   onSnapshotChange,
   qualifyingDayProfit,
   inclusiveBar = false,
+  spent = false,
   asksTradingDays,
 }: SnapshotPanelProps) {
   return (
@@ -30,8 +33,10 @@ export function SnapshotPanel({
         Your numbers
       </h2>
       <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">
-        Copy these from your account whenever they change. The plan above
-        updates as you type.
+        Copy these from your account whenever they change.{' '}
+        {spent
+          ? 'They stay here for the record, though this account has no payout left to plan for.'
+          : 'The plan above updates as you type.'}
       </p>
 
       <div

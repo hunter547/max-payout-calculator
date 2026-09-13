@@ -277,6 +277,12 @@ their older rules and exercise three things nothing else does:
   $50 or more. `minTradingDays` counts the days and `minQualifyingDays` the
   ones over the bar; whichever is further away sets the days still owed.
 
+The EOD and Intraday accounts end where Legacy carries on: Apex closes one
+after its sixth payout, which is `maxPayouts`. Past it there is nothing to
+plan for, so the schedule step says the account is finished instead of quoting
+a seventh payout, and the dashboard's headline says so instead of a target.
+Qualifying again starts a new account at the first payout.
+
 Apex also words its bar as "$100 or more" where Tradeify says "more than
 $150", so `qualifyingDayInclusive` decides whether a day landing exactly on
 the figure counts, and a planned day aims at the bar rather than a cent over.

@@ -210,6 +210,12 @@ export interface PayoutSchedule {
    * land on. Absent where `floorBreaches` settles it for every payout.
    */
   floorBreachesFrom?: number
+  /**
+   * How many payouts the account is good for, where a firm closes it after a
+   * count: Apex's EOD and Intraday accounts end at six, and the trader
+   * qualifies for a new one. Absent where a firm keeps paying out.
+   */
+  maxPayouts?: number
 }
 
 /** Which of an account type's two sets of terms this account is on. */
@@ -756,6 +762,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     payout: {
       caps: [1000],
       minimumPayout: 500,
+      maxPayouts: 6,
       qualifyingBalance: 26600,
       floor: 26100,
     },
@@ -773,6 +780,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     payout: {
       caps: [1500, 1500, 2000, 2500, 2500, 3000],
       minimumPayout: 500,
+      maxPayouts: 6,
       qualifyingBalance: 52600,
       floor: 52100,
     },
@@ -790,6 +798,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     payout: {
       caps: [2000, 2500, 2500, 3000, 4000, 4000],
       minimumPayout: 500,
+      maxPayouts: 6,
       qualifyingBalance: 103600,
       floor: 103100,
     },
@@ -807,6 +816,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     payout: {
       caps: [2500, 3000, 3000, 3000, 4000, 5000],
       minimumPayout: 500,
+      maxPayouts: 6,
       qualifyingBalance: 154600,
       floor: 154100,
     },
@@ -824,6 +834,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     payout: {
       caps: [1000],
       minimumPayout: 500,
+      maxPayouts: 6,
       qualifyingBalance: 26600,
       floor: 26100,
     },
@@ -841,6 +852,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     payout: {
       caps: [1500, 2000, 2500, 2500, 3000, 3000],
       minimumPayout: 500,
+      maxPayouts: 6,
       qualifyingBalance: 52600,
       floor: 52100,
     },
@@ -858,6 +870,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     payout: {
       caps: [2000, 2500, 3000, 3000, 4000, 4000],
       minimumPayout: 500,
+      maxPayouts: 6,
       qualifyingBalance: 103600,
       floor: 103100,
     },
@@ -875,6 +888,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     payout: {
       caps: [2500, 3000, 3000, 4000, 4000, 5000],
       minimumPayout: 500,
+      maxPayouts: 6,
       qualifyingBalance: 154600,
       floor: 154100,
     },
@@ -1123,6 +1137,20 @@ export function floorAt(schedule: PayoutSchedule, payoutsSoFar: number): number 
   return schedule.floors
     ? byPayout(schedule.floors, payoutsSoFar)
     : (schedule.floor ?? 0)
+}
+
+/**
+ * Whether the account has no payouts left in it. The next payout would be
+ * past the firm's count, so there is nothing left to plan for.
+ */
+export function payoutsSpent(
+  schedule: PayoutSchedule,
+  payoutsSoFar: number,
+): boolean {
+  return (
+    schedule.maxPayouts !== undefined &&
+    nextPayoutNumber(payoutsSoFar) > schedule.maxPayouts
+  )
 }
 
 /** The most one request may withdraw, at that payout number. */

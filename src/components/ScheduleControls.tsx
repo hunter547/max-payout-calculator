@@ -6,6 +6,9 @@ import { Label } from '@/components/ui/label'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   consistencyFor,
+  floorAt,
+  floorBreachesAt,
+  payoutsSpent,
   drawdownRoomAt,
   firmOf,
   graduates,
@@ -78,6 +81,11 @@ export function ScheduleControls({
   const cap = payoutCap(schedule, taken)
   const goal = profitGoal(schedule, taken)
   const consistency = consistencyFor(template, terms, taken)
+  const breaches = floorBreachesAt(schedule, taken)
+  const floor = floorAt(schedule, taken)
+  // Some firms end the account after a count of payouts rather than carrying
+  // on, so there is nothing left to aim at.
+  const spent = payoutsSpent(schedule, taken)
   const risingConsistency = (schedule.consistencies?.length ?? 0) > 1
   const buffer = Math.max(0, parseAmount(payoutBuffer))
   const threshold = payoutThreshold(schedule, taken, buffer)
@@ -133,17 +141,25 @@ export function ScheduleControls({
       {/* The floor fails the account at or below it, so a payout that lands
           exactly on it has already breached. No firm publishes a cushion, so
           the trader sets their own the way MyFundedFutures fixes $2,100. */}
-      {schedule.floorBreaches && (
+      {breaches && (
         <MoneyField
           id={`${idPrefix}-buffer`}
           label="Payout buffer"
-          hint={`What a payout leaves above the ${formatRule(schedule.floor ?? 0)} floor, which fails the account at or below it. ${firmOf(template).name} sets no figure, so this one is yours.`}
+          hint={`What a payout leaves above the ${formatRule(floor)} floor, which fails the account at or below it. ${firmOf(template).name} sets no figure, so this one is yours.`}
           value={payoutBuffer}
           disabled={disabled}
           onChange={onBufferChange}
         />
       )}
 
+      {spent ? (
+        <p className="text-sm leading-snug text-muted-foreground">
+          {firmOf(template).name} closes an account after{' '}
+          <Figure>{schedule.maxPayouts}</Figure> payouts, so this one is
+          finished. Qualifying again starts a new account, with its schedule
+          back at the first payout.
+        </p>
+      ) : (
       <p className="text-sm leading-snug text-muted-foreground">
         {counts ? `Payout ${next}` : 'A payout'} can be up to{' '}
         <Figure>{formatRule(cap)}</Figure>
@@ -177,8 +193,9 @@ export function ScheduleControls({
           </>
         )}
       </p>
+      )}
 
-      {thin && left !== null && template.drawdown !== undefined && (
+      {!spent && thin && left !== null && template.drawdown !== undefined && (
         <Alert role="note">
           <TriangleAlert />
           <AlertTitle>

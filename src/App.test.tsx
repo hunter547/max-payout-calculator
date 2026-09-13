@@ -591,6 +591,52 @@ describe('walkthrough', () => {
     expect(document.documentElement.dataset.brand).toBe('tradeify')
   })
 
+  it('says an Apex account is finished once its payouts are spent', () => {
+    render()
+    const template = accountTemplate('apex-50k-eod')
+    choose(firmOf(template).id)
+    press('Continue')
+    choose(template.programId)
+    press('Continue')
+    choose('apex-50k-eod')
+    press('Continue')
+
+    // Five taken and the sixth is still there to plan for.
+    type(byLabel('Payouts taken so far'), '5')
+    expect(text()).toContain('Payout 6 can be up to $3,000')
+    expect(text()).not.toContain('so this one is finished')
+
+    // Six taken, and Apex closes the account at six.
+    type(byLabel('Payouts taken so far'), '6')
+    expect(text()).toContain('closes an account after')
+    expect(text()).toContain('so this one is finished')
+    expect(text()).not.toContain('Payout 7 can be up to')
+
+    press('Continue')
+    choose('pointInTime')
+    press('Continue')
+    type(byLabel('Current balance'), '54000')
+    press('Continue')
+    type(byLabel('Largest profit day'), '400')
+    press('Continue')
+    type(byLabel('Cumulative profit'), '900')
+    press('Continue')
+    if (container.querySelector('#walkthrough-trading-days')) {
+      type(byLabel('Trading days so far'), '5')
+      press('Continue')
+    }
+    choose('conservative')
+    press('Show my plan')
+
+    // And the dashboard says so rather than planning a payout that cannot
+    // happen.
+    expect(headline()).toBe('This account is finished')
+    expect(text()).toContain('Qualifying again starts a new one')
+    // And no plan under it: there are no trading days to aim at.
+    expect(text()).not.toContain('Conservative')
+    expect(container.querySelector('svg.recharts-surface')).toBeNull()
+  })
+
   it('asks where the trader is in a graduated payout schedule', () => {
     render()
     choose('tradeify')

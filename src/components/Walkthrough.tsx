@@ -178,6 +178,12 @@ function stepCopy(step: StepId, draft: SetupDraft) {
     case 'payouts': {
       const counts =
         graduates(template.payout) || graduates(template.alt ?? template.payout)
+      // Only accounts whose floor can fail them ask for a buffer, and Apex's
+      // legacy accounts only from their fourth payout.
+      const buffers = [template.payout, template.alt].some(
+        (schedule) =>
+          schedule?.floorBreaches || schedule?.floorBreachesFrom !== undefined,
+      )
       return {
         title: counts
           ? 'Where are you in your payout schedule?'
@@ -185,7 +191,7 @@ function stepCopy(step: StepId, draft: SetupDraft) {
         lead: counts
           ? `${firmOf(template).name} caps each payout by how many you have taken, so the count sets your target${
               template.alt ? ', as do the terms you are on' : ''
-            }. You also set the buffer a payout leaves behind, which the firm does not fix for you.`
+            }.${buffers ? ' You also set the buffer a payout leaves behind, which the firm does not fix for you.' : ''}`
           : `What ${firmOf(template).name} lets you withdraw depends on it.`,
       }
     }
