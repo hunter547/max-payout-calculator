@@ -41,10 +41,13 @@ export function TargetBreakdown({
     {
       label: 'Minimum target',
       value: formatCurrency(results.minimumTargetNetProfit),
+      // Three things can set it, and which one did is the useful part.
       note:
         results.minimumTargetNetProfit === inputs.minimumPayout
           ? `The ${formatCurrency(inputs.minimumPayout)} minimum payout.`
-          : `What takes your balance to the ${formatCurrency(inputs.payoutThreshold)} a max payout needs.`,
+          : results.minimumTargetNetProfit === inputs.profitGoal
+            ? `The profit this payout asks for since the last one.`
+            : `What takes your balance to the ${formatCurrency(inputs.payoutThreshold)} a max payout needs.`,
     },
     {
       label: 'Profit required',

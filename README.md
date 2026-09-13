@@ -191,6 +191,10 @@ the lock, and "Restore defaults" puts the template's rules back.
 | Lucid Trading | Pro | 50k | $50,000 | — | 40% | none | every day | $500 |
 | Lucid Trading | Pro | 100k | $100,000 | — | 40% | none | every day | $500 |
 | Lucid Trading | Pro | 150k | $150,000 | — | 40% | none | every day | $500 |
+| Lucid Trading | Direct | 25k | $25,000 | none | 20% | none | every day | $500 |
+| Lucid Trading | Direct | 50k | $50,000 | none | 20% | none | every day | $500 |
+| Lucid Trading | Direct | 100k | $100,000 | none | 20% | none | every day | $500 |
+| Lucid Trading | Direct | 150k | $150,000 | none | 20% | none | every day | $500 |
 
 Lightning has no qualifying balance because it gates on profit earned rather
 than balance reached — see [Profit goals](#profit-goals) — and its consistency
@@ -198,6 +202,10 @@ rule tightens with each payout. Topstep's Express Funded Account counts profit
 up from zero like a Builder, and caps a request at half the balance — see
 [A share of the balance](#a-share-of-the-balance). Its three trading days are
 what a 40% consistency rule takes anyway, so they never bind.
+
+LucidDirect gates on profit alone — see [No balance to
+reach](#no-balance-to-reach) — at a tighter 20% and with a goal that falls after
+the first payout while the cap rises after the third.
 
 LucidPro gates on both at once: a profit goal between cycles ($250 to $1,000 by
 size) and a balance above its buffer. The buffer is the account's max loss
@@ -307,6 +315,8 @@ either gets the walkthrough screen and the dashboard controls for free.
 Sourced from [Builder Plan 25k](https://help.myfundedfutures.com/en/articles/15862870-builder-plan-25k-a-comprehensive-guide),
 [LucidPro
 Payouts](https://support.lucidtrading.com/en/articles/12890092-lucidpro-payouts),
+[LucidDirect Payout
+Objectives](https://support.lucidtrading.com/en/articles/12890164-luciddirect-payout-objectives),
 [Topstep Payout
 Policy](https://help.topstep.com/en/articles/8284233-topstep-payout-policy),
 [Lightning Funded: Account Payout

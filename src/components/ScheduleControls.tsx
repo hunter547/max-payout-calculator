@@ -137,7 +137,7 @@ export function ScheduleControls({
         <MoneyField
           id={`${idPrefix}-buffer`}
           label="Payout buffer"
-          hint={`What a payout leaves above the ${formatRule(schedule.floor)} floor, which fails the account at or below it. ${firmOf(template).name} sets no figure, so this one is yours.`}
+          hint={`What a payout leaves above the ${formatRule(schedule.floor ?? 0)} floor, which fails the account at or below it. ${firmOf(template).name} sets no figure, so this one is yours.`}
           value={payoutBuffer}
           disabled={disabled}
           onChange={onBufferChange}
@@ -164,12 +164,16 @@ export function ScheduleControls({
             <Figure>{formatPercent(consistency)}</Figure>.{' '}
           </>
         )}
-        The balance it needs is <Figure>{formatRule(threshold)}</Figure>
-        {left === null ? (
-          '.'
-        ) : (
+        {threshold > 0 && (
           <>
-            , leaving <Figure>{formatRule(left)}</Figure> of drawdown room.
+            The balance it needs is <Figure>{formatRule(threshold)}</Figure>
+            {left === null ? (
+              '.'
+            ) : (
+              <>
+                , leaving <Figure>{formatRule(left)}</Figure> of drawdown room.
+              </>
+            )}
           </>
         )}
       </p>

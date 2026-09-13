@@ -36,7 +36,7 @@ const RULES: { key: RuleKey; label: string; unit: FieldUnit; hint: string }[] = 
     key: 'payoutThreshold',
     label: 'Balance for max payout',
     unit: '$',
-    hint: 'Balance you need before the biggest payout can be requested. Set by the payout schedule above.',
+    hint: 'Balance you need before the biggest payout can be requested, or 0 where the firm asks for profit instead. Set by the payout schedule above.',
   },
   {
     key: 'profitGoal',

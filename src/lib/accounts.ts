@@ -107,6 +107,7 @@ export const ACCOUNT_PROGRAMS: readonly AccountProgram[] = [
     variant: TRADEIFY_CUTOFF,
   },
   { id: 'lucid-pro', firmId: 'lucid', name: 'Pro' },
+  { id: 'lucid-direct', firmId: 'lucid', name: 'Direct' },
   {
     id: 'topstep-xfa-consistency',
     firmId: 'topstep',
@@ -145,16 +146,20 @@ export interface PayoutSchedule {
   consistencies?: readonly number[]
   /** The smallest request the firm accepts. */
   minimumPayout: number
-  /** The balance a payout request needs at all, 0 where none is published. */
-  qualifyingBalance: number
+  /** The balance a payout request needs at all, where a firm names one. */
+  qualifyingBalance?: number
   /**
    * The share of the balance one request may take, where a firm caps it that
    * way as well as in dollars: Topstep allows half. Reaching the dollar cap
    * then needs a balance of cap / share.
    */
   withdrawShare?: number
-  /** What has to remain afterwards. */
-  floor: number
+  /**
+   * What has to remain afterwards. Absent, with no qualifying balance and no
+   * share either, the firm gates on profit alone and there is no balance to
+   * reach — see `payoutThreshold`.
+   */
+  floor?: number
   /**
    * Whether the floor fails the account rather than merely being held back.
    * A trailing drawdown breaches at or below its level, so a payout has to
@@ -602,6 +607,70 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
       floor: 154600,
     },
   },
+  {
+    // Instant funded: the firm names a profit goal and a consistency rule and
+    // no balance at all, so there is no threshold to reach, only profit.
+    id: 'lucid-25k-direct',
+    programId: 'lucid-direct',
+    name: '25k',
+    startingBalance: 25000,
+    consistency: 0.2,
+    minTradingDays: 0,
+    qualifyingDayProfit: 0,
+    payout: {
+      caps: [1000],
+      goals: [1500, 1250],
+      minimumPayout: 500,
+    },
+  },
+  {
+    // Instant funded: the firm names a profit goal and a consistency rule and
+    // no balance at all, so there is no threshold to reach, only profit.
+    id: 'lucid-50k-direct',
+    programId: 'lucid-direct',
+    name: '50k',
+    startingBalance: 50000,
+    consistency: 0.2,
+    minTradingDays: 0,
+    qualifyingDayProfit: 0,
+    payout: {
+      caps: [2000, 2000, 2000, 2500],
+      goals: [3000, 2500],
+      minimumPayout: 500,
+    },
+  },
+  {
+    // Instant funded: the firm names a profit goal and a consistency rule and
+    // no balance at all, so there is no threshold to reach, only profit.
+    id: 'lucid-100k-direct',
+    programId: 'lucid-direct',
+    name: '100k',
+    startingBalance: 100000,
+    consistency: 0.2,
+    minTradingDays: 0,
+    qualifyingDayProfit: 0,
+    payout: {
+      caps: [2500, 2500, 2500, 3000],
+      goals: [6000, 3500],
+      minimumPayout: 500,
+    },
+  },
+  {
+    // Instant funded: the firm names a profit goal and a consistency rule and
+    // no balance at all, so there is no threshold to reach, only profit.
+    id: 'lucid-150k-direct',
+    programId: 'lucid-direct',
+    name: '150k',
+    startingBalance: 150000,
+    consistency: 0.2,
+    minTradingDays: 0,
+    qualifyingDayProfit: 0,
+    payout: {
+      caps: [3000, 3000, 3000, 3500],
+      goals: [9000, 4500],
+      minimumPayout: 500,
+    },
+  },
 ]
 
 /**
@@ -763,7 +832,7 @@ export function maxPayoutFor(
 ): number {
   const limits = [
     payoutCap(schedule, payoutsSoFar),
-    balance - schedule.floor,
+    balance - (schedule.floor ?? 0),
     ...(schedule.withdrawShare ? [balance * schedule.withdrawShare] : []),
   ]
   return Math.max(0, Math.round(Math.min(...limits) * 100) / 100)
@@ -776,7 +845,7 @@ export function drawdownRoomAt(
   balance: number,
 ): number | null {
   if (!schedule.floorBreaches) return null
-  return balance - payoutCap(schedule, payoutsSoFar) - schedule.floor
+  return balance - payoutCap(schedule, payoutsSoFar) - (schedule.floor ?? 0)
 }
 
 /**
@@ -793,10 +862,17 @@ export function payoutThreshold(
   buffer = DEFAULT_PAYOUT_BUFFER,
 ): number {
   const cap = payoutCap(schedule, payoutsSoFar)
+  const qualifying = schedule.qualifyingBalance ?? 0
+  const floor = schedule.floor ?? 0
+  // Nothing held back, nothing to qualify at and no share of the balance: the
+  // firm gates on profit alone, so there is no balance to reach. Zero says so,
+  // and the profit goal is then what the target answers to.
+  if (!qualifying && !floor && !schedule.withdrawShare) return 0
+
   const keep = schedule.floorBreaches ? Math.max(0, buffer) : 0
   return Math.max(
-    schedule.qualifyingBalance,
-    schedule.floor + cap + keep,
+    qualifying,
+    floor + cap + keep,
     // Half the balance has to cover the cap, so the balance is twice it.
     schedule.withdrawShare ? cap / schedule.withdrawShare : 0,
   )

@@ -208,6 +208,7 @@ describe('walkthrough', () => {
     expect(text()).toContain('Lightning: 4 sizes, 25k to 150k')
     expect(text()).toContain('XFA Consistency: 3 sizes, 50k to 150k')
     expect(text()).toContain('Pro: 4 sizes, 25k to 150k')
+    expect(text()).toContain('Direct: 4 sizes, 25k to 150k')
   })
 
   it('asks for a firm before moving on', () => {
@@ -717,6 +718,36 @@ describe('walkthrough', () => {
     // Two payouts in, the logged days no longer add up to the balance.
     expect(headline()).toBe('What’s your current balance?')
     expect(text()).not.toContain('Have you taken a payout')
+  })
+
+  it('plans a LucidDirect account to its profit goal, not to a balance', () => {
+    render()
+    choose('lucid')
+    press('Continue')
+    choose('lucid-direct')
+    press('Continue')
+    choose('lucid-50k-direct')
+    press('Continue')
+
+    // The schedule screen names the goal, and no balance to reach with it.
+    expect(text()).toContain('It unlocks at $3,000 of profit')
+    expect(text()).not.toContain('The balance it needs')
+    press('Continue')
+
+    choose('pointInTime')
+    press('Continue')
+    type(byLabel('Largest profit day'), '400')
+    press('Continue')
+    type(byLabel('Cumulative profit'), '1000')
+    press('Continue')
+    choose('conservative')
+    press('Show my plan')
+
+    // $2,000 of the $3,000 goal still to make, at 20% of it a day.
+    expect(headline()).toBe('Four more trading days at $500.00 each')
+    expect(byLabel('Profit goal').value).toBe('3000')
+    expect(byLabel('Balance for max payout').value).toBe('0')
+    expect(text()).toContain('The profit this payout asks for since the last one.')
   })
 
   it('asks Topstep whether a Daily Loss Limit was added', () => {

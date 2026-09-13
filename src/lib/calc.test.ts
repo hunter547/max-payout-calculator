@@ -209,6 +209,32 @@ describe('profit goals', () => {
     expect(calculate(behind).minimumTargetNetProfit).toBe(12600)
   })
 
+  it('answers to the goal alone where there is no balance to reach', () => {
+    // A LucidDirect 50k: a $3,000 goal, a 20% rule, and no threshold at all.
+    const direct: CalcInputs = {
+      ...lightning,
+      payoutThreshold: 0,
+      profitGoal: 3000,
+      consistencyRequirement: 0.2,
+      minimumPayout: 500,
+      balance: 50000,
+      currentNetProfit: 0,
+    }
+    const r = calculate(direct)
+    // The balance term is far below the goal, so the goal is the target.
+    expect(r.minimumTargetNetProfit).toBe(3000)
+    expect(r.minimumNetProfitRequired).toBe(3000)
+    // Five days at $600, which is 20% of the goal.
+    const plan = planFor(direct, r, 'conservative')
+    expect(plan.days).toBe(5)
+    expect(plan.dailyProfit).toBe(600)
+
+    // And a balance far above it changes nothing: profit is the whole gate.
+    expect(
+      calculate({ ...direct, balance: 90000 }).minimumTargetNetProfit,
+    ).toBe(3000)
+  })
+
   it('leaves accounts without a goal exactly as they were', () => {
     const r = calculate({ ...lightning, profitGoal: 0 })
     expect(r.minimumTargetNetProfit).toBe(2600) // the balance shortfall

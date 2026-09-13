@@ -449,6 +449,48 @@ describe('account templates', () => {
     }
   })
 
+  it('gates LucidDirect on profit alone, with no balance to reach', () => {
+    const table = [
+      ['lucid-25k-direct', 25000, 1500, 1250, 1000, 1000],
+      ['lucid-50k-direct', 50000, 3000, 2500, 2000, 2500],
+      ['lucid-100k-direct', 100000, 6000, 3500, 2500, 3000],
+      ['lucid-150k-direct', 150000, 9000, 4500, 3000, 3500],
+    ] as const
+
+    for (const [id, size, goal1, goal2, cap1, cap4] of table) {
+      const template = accountTemplate(id)
+      expect(template).toMatchObject({
+        programId: 'lucid-direct',
+        startingBalance: size,
+        // A tighter rule than Pro's, and still no day count.
+        consistency: 0.2,
+        minTradingDays: 0,
+      })
+
+      // The goal falls after the first payout, and the cap rises after the
+      // third — which they publish as payouts 1-3 and 4-5.
+      expect([0, 1, 4].map((n) => profitGoal(template.payout, n))).toEqual([
+        goal1,
+        goal2,
+        goal2,
+      ])
+      expect([0, 1, 2, 3, 4].map((n) => payoutCap(template.payout, n))).toEqual([
+        cap1,
+        cap1,
+        cap1,
+        cap4,
+        cap4,
+      ])
+
+      // No buffer, no qualifying balance, no share: nothing to reach.
+      expect(template.payout.floor).toBeUndefined()
+      expect(template.payout.qualifyingBalance).toBeUndefined()
+      expect(payoutThreshold(template.payout, 0)).toBe(0)
+      // Which leaves the profit goal to set the target.
+      expect(goal1).toBeGreaterThanOrEqual(cap1)
+    }
+  })
+
   it('asks LucidPro where it is in its payouts, and nothing else', () => {
     const template = accountTemplate('lucid-50k-pro')
     // The cap moves with the payout number, so the count is worth asking.
@@ -504,7 +546,10 @@ describe('account templates', () => {
       expect(sizesFor(t.programId)).toContain(t)
       expect(accountsFor(firmOf(t).id)).toContain(t)
       expect(t.payout.caps.length).toBeGreaterThan(0)
-      expect(payoutThreshold(t.payout, 0)).toBeGreaterThan(t.startingBalance)
+      // A balance to reach, or a profit goal instead of one.
+      const threshold = payoutThreshold(t.payout, 0)
+      if (threshold > 0) expect(threshold).toBeGreaterThan(t.startingBalance)
+      else expect(profitGoal(t.payout, 0)).toBeGreaterThan(0)
       // Whatever the payout number, a plan never targets the breach level.
       for (const n of [0, 1, 5, 9]) {
         const room = drawdownRoomAt(t.payout, n, payoutThreshold(t.payout, n))
