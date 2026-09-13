@@ -10,7 +10,7 @@
  * afterwards; a template is a starting point.
  */
 
-import lucidLogo from '@/assets/brands/lucid.webp'
+import lucidLogo from '@/assets/brands/lucid.svg'
 import mffuLogo from '@/assets/brands/mffu.svg'
 import topstepLogo from '@/assets/brands/topstep.svg'
 import tradeifyLogo from '@/assets/brands/tradeify.svg'
