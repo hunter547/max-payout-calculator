@@ -1305,7 +1305,8 @@ describe('color themes', () => {
     expect(footer).toContain('Your entries are saved in this browser only.')
     // Named whether the app holds their accounts or only wears their colors.
     expect(footer).toContain(
-      'Not affiliated with or endorsed by MyFundedFutures, Tradeify, Topstep, or Lucid Trading.',
+      'Not affiliated with or endorsed by MyFundedFutures, Tradeify, Topstep, ' +
+        'Lucid Trading, or Apex Trader Funding.',
     )
   })
 })

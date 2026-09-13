@@ -7,6 +7,7 @@
 @import "@fontsource-variable/mona-sans/wdth.css";
 @import "@fontsource-variable/work-sans/index.css";
 @import "@fontsource-variable/inter/index.css";
+@import "@fontsource-variable/saira/wdth.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -328,6 +329,53 @@
   --cap: #efa22b;
   --grid: #1a1a1a;
   --axis: #3e424a;
+}
+
+/*
+  Theme: Apex Trader Funding. Dark only, from apextraderfunding.com.
+    Navy    #050927  page (their own navy)
+    Panel   #0B1138  chart plate, cards
+    Cobalt  #0026FF  actions, with white on top
+    Sky     #5AC7FA  focus rings
+    Gold    #FFB000  the daily cap line
+    Blue    #4F7BF0  planned days
+    Steel   #A7AFD2  secondary text
+  Type: Saira, which their own preset stack carries. Its width axis keeps the
+  expanded headings and condensed figures working as in the default theme;
+  their display face, Benton Sans Wide Black, is licensed.
+  Cobalt is the brand and takes --primary, but it is nearly as dark as the page
+  (2.4:1), so it cannot carry a filled bar or a focus ring: planned days take
+  the validated blue, rings take their sky, and the cap takes their gold.
+*/
+:root[data-brand='apex'] {
+  color-scheme: dark;
+  --font-sans: "Saira Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --background: #050927;
+  --foreground: #f4f6ff;
+  --card: #0b1138;
+  --card-foreground: #f4f6ff;
+  --popover: #101743;
+  --popover-foreground: #f4f6ff;
+  --primary: #0026ff;
+  --primary-foreground: #ffffff;
+  --secondary: #1a223f;
+  --secondary-foreground: #f4f6ff;
+  --muted: #0d1336;
+  --muted-foreground: #a7afd2;
+  --accent: #141c4a;
+  --accent-foreground: #f4f6ff;
+  --destructive: #d2463c;
+  --border: #232c63;
+  --input: #2a3470;
+  --ring: #5ac7fa;
+
+  --profit: #2daa80;
+  --loss: #d2463c;
+  --plan: #4f7bf0;
+  --cap: #ffb000;
+  --grid: #131a3f;
+  --axis: #3a4472;
 }
 
 @utility font-display {

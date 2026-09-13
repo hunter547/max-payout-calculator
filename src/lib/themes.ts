@@ -58,6 +58,13 @@ export const BRAND_THEMES: readonly BrandTheme[] = [
     swatches: ['#090909', '#61f8ab', '#35435a'],
     firm: true,
   },
+  {
+    id: 'apex',
+    name: 'Apex Trader Funding',
+    schemes: ['dark'],
+    swatches: ['#050927', '#0026ff', '#ffb000'],
+    firm: true,
+  },
 ]
 
 /** The firms the app dresses itself as, whether or not it holds their accounts. */

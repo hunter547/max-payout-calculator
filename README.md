@@ -388,10 +388,14 @@ where a lockup would crowd the name.
 [`FirmIcon`](src/components/FirmIcon.tsx) draws it plainly — every icon brings
 whatever ground it has, so none needs a plate.
 
-Two of them are built out of the lockup beside them rather than traced
+Three of them are built out of the lockup beside them rather than traced
 separately: Tradeify's `tdfy` reuses the `t`, `d` and `f`-`y` outlines from
-`tradeify.svg`, and MyFundedFutures' shield is the mark out of `mffu.svg`. Keep
-that in mind when replacing a lockup — the icon shares its outlines.
+`tradeify.svg`, MyFundedFutures' shield is the mark out of `mffu.svg`, and Apex
+Trader Funding's is the mark out of `apex.svg` on the square its favicon uses.
+Keep that in mind when replacing a lockup — the icon shares its outlines.
+
+A firm's art can land before the firm does, alongside its theme; it sits in
+`src/assets/brands/` unused until the firm is registered in `FIRMS`.
 
 ### Minimum trading days
 
@@ -636,12 +640,14 @@ included.
 | Tradeify | dark only | colors and typeface (Mona Sans) from tradeify.co |
 | Topstep | dark only | colors and typeface (Work Sans) from topstep.com |
 | Lucid Trading | dark only | colors and typeface (Inter) from lucidtrading.com |
+| Apex Trader Funding | dark only | colors and typeface (Saira) from apextraderfunding.com |
 
 Picking a firm in the walkthrough switches to its theme, as does switching
 accounts on the dashboard. Themes carry no logos of their own — a logo belongs
 to the firm, in `FIRMS`, and shows next to the account whichever theme is on.
 
-A theme can arrive before its accounts do, as Lucid Trading's did: it is
+A theme can arrive before its accounts do, as Lucid Trading's and Apex Trader
+Funding's did: it is
 offered in the theme picker from the moment it exists, and everywhere else once
 the firm is registered. Themes taken from a firm's own site are marked `firm: true`, and
 the footer's not-affiliated line is built from those plus `FIRMS`, so a firm is
