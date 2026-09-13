@@ -1,4 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-<!-- Topstep app icon: the T from topstep.svg, same path, set on a black
-     square at 72% of its height and centred. -->
-<path fill="#000" d="M0 0h512v512H0z"/><path fill="#fff" d="M168.7 136.27h48.27c2.4.93 3.7 1.9 4.57 4.47l.13 6.21.05 28.09V439.9l.06.42 56.72-.03h12.78c.15-.02.08-1.14.08-1.18l.04-31.4V140.82c.51-1.21.86-1.9 1.8-2.88.54-.54 1-.74 1.57-1.16l1.19-.5h46.92l.41-.1V71.82l-5.54-.1-18.42-.02H169.12l-.41-.01z"/></svg>
+<!-- Topstep app icon: the T from topstep.svg, same path, on the dark navy
+     ground sampled from the firm's own app icon. -->
+<radialGradient id="g" gradientUnits="userSpaceOnUse" cx="256" cy="560" r="587">
+<stop offset="0" stop-color="#0f1e34"/><stop offset="1" stop-color="#060a0f"/>
+</radialGradient>
+<path fill="url(#g)" d="M0 0h512v512H0z"/><path fill="#fff" d="M168.7 136.27h48.27c2.4.93 3.7 1.9 4.57 4.47l.13 6.21.05 28.09V439.9l.06.42 56.72-.03h12.78c.15-.02.08-1.14.08-1.18l.04-31.4V140.82c.51-1.21.86-1.9 1.8-2.88.54-.54 1-.74 1.57-1.16l1.19-.5h46.92l.41-.1V71.82l-5.54-.1-18.42-.02H169.12l-.41-.01z"/></svg>
