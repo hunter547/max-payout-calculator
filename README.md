@@ -126,9 +126,33 @@ Your numbers map to the sheet like this:
 | `F3` Current Net Profit | entered | sum of every day, losses included |
 | trading days | entered | logged days that clear the firm's profit bar |
 
-Everything is saved in your browser's `localStorage` (`mpc.setup`, which also
-holds the payout schedule, plus `mpc.rules`, `mpc.snapshot`, `mpc.days` and
-`mpc.theme`). Nothing is sent anywhere.
+Everything is saved in your browser's `localStorage` — `mpc.accounts` holds
+every account (its setup, rules, numbers and logged days), `mpc.current` says
+which one is open, and `mpc.theme` and `mpc.brand` are the appearance. Nothing
+is sent anywhere.
+
+## Several accounts
+
+Traders run more than one account, so the app keeps a list of them
+([`src/lib/portfolio.ts`](src/lib/portfolio.ts)) and shows one at a time. The
+account name in the header is a switcher: it lists what you have with each
+firm's logo, and adds, renames or removes one.
+
+Everything else is per account — its template and rules, its ledger or numbers,
+its payout schedule and its payouts taken — so two Tradeify 50k Growths sit
+side by side without touching each other. Switching carries the app to that
+account's firm colors, and the theme picker still overrides until you switch
+again.
+
+**Nothing has to be named.** An account is called what it is —
+"Tradeify 50k Growth" — and only when you hold two of the same does it become
+"#1" and "#2". A nickname replaces that, and stops the numbering; name one of
+a pair and the other goes back to its plain name.
+
+The one account the app used to hold moves across on first load, keeping its
+rules and its ledger, and the old keys are left where they are rather than
+deleted. `loadAccounts` does that, and covers storage from before the
+walkthrough existed too.
 
 ## Taking a payout
 

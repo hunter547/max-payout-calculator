@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeftRight, Moon, PartyPopper, Sun } from 'lucide-react'
 import { AccountPanel, type BalanceDisplay } from '@/components/AccountPanel'
+import { AccountSwitcher } from '@/components/AccountSwitcher'
 import { CuratedControls } from '@/components/CuratedControls'
 import { Ledger } from '@/components/Ledger'
 import { PayoutFlow, type PayoutResult } from '@/components/PayoutFlow'
@@ -58,9 +59,16 @@ import {
   type DayEntry,
 } from '@/lib/ledger'
 import {
+  accountName,
+  currentAccount,
+  loadAccounts,
+  nextCurrent,
+  SNAPSHOT_DEFAULTS,
+  type Account,
+} from '@/lib/portfolio'
+import {
   CURATED_DEFAULT,
   deriveInputs,
-  legacySetup,
   resolvePlan,
   termsOf,
   toCuratedChoice,
@@ -71,12 +79,6 @@ import {
   type Snapshot,
 } from '@/lib/setup'
 import { FIRM_THEMES } from '@/lib/themes'
-
-const SNAPSHOT_DEFAULTS: Snapshot = {
-  largestProfitDay: '',
-  netProfit: '',
-  tradingDays: '',
-}
 
 const EMPTY_DRAFT: SetupDraft = {
   firmId: '',
@@ -218,7 +220,8 @@ function AppHeader({
   children,
 }: {
   appearance: Appearance
-  account: string
+  /** The account line: a name, a switcher, or nothing while there is none. */
+  account: ReactNode
   children?: ReactNode
 }) {
   const nextScheme = appearance.scheme === 'dark' ? 'light' : 'dark'
@@ -226,7 +229,7 @@ function AppHeader({
     <header className="flex items-center justify-between gap-4 py-5">
       {/* The firm's logo belongs with its account, not up here. */}
       <div className="leading-tight">
-        {account && <p className="text-sm text-muted-foreground">{account}</p>}
+        {account && <div className="text-sm text-muted-foreground">{account}</div>}
         <p className="font-expanded text-base font-bold">
           Max payout calculator
         </p>
@@ -260,34 +263,68 @@ function AppHeader({
 
 export default function App() {
   const appearance = useAppearance()
-  const [setup, setSetup] = usePersistentState<Setup | null>(
-    'mpc.setup',
-    legacySetup,
+  const [accounts, setAccounts] = usePersistentState<Account[]>(
+    'mpc.accounts',
+    loadAccounts,
   )
-  const [rules, setRules] = usePersistentState<Record<AccountKey, string>>(
-    'mpc.rules',
-    () => accountFor(accountTemplate(DEFAULT_TEMPLATE)),
+  const [currentId, setCurrentId] = usePersistentState<string>(
+    'mpc.current',
+    () => loadAccounts()[0]?.id ?? '',
   )
-  const [storedSnapshot, setSnapshot] = usePersistentState<Snapshot>(
-    'mpc.snapshot',
-    SNAPSHOT_DEFAULTS,
-  )
-  const [days, setDays] = usePersistentState<DayEntry[]>('mpc.days', [])
   const [reconfiguring, setReconfiguring] = useState(false)
+  const [adding, setAdding] = useState(false)
   const [takingPayout, setTakingPayout] = useState(false)
   // The account picked in the walkthrough, before anything is saved, and the
   // theme that was showing before it moved.
   const [draftTemplate, setDraftTemplate] = useState<string | null>(null)
   const brandBeforeDraft = useRef<string | null>(null)
 
+  const openAccount = currentAccount(accounts, currentId)
+  const setup = openAccount?.setup ?? null
+  const days = useMemo(() => openAccount?.days ?? [], [openAccount])
+
+  /** Write one part of the open account, leaving the others alone. */
+  function patch(change: (account: Account) => Account) {
+    setAccounts((list) =>
+      list.map((a) => (a.id === openAccount?.id ? change(a) : a)),
+    )
+  }
+  const setSetup = (next: Setup | ((prev: Setup) => Setup)) =>
+    patch((a) => ({
+      ...a,
+      setup: typeof next === 'function' ? next(a.setup) : next,
+    }))
+  const setRules = (
+    next:
+      | Record<AccountKey, string>
+      | ((prev: Record<AccountKey, string>) => Record<AccountKey, string>),
+  ) =>
+    patch((a) => ({
+      ...a,
+      rules: typeof next === 'function' ? next(a.rules) : next,
+    }))
+  const setSnapshot = (next: Snapshot | ((prev: Snapshot) => Snapshot)) =>
+    patch((a) => ({
+      ...a,
+      snapshot: typeof next === 'function' ? next(a.snapshot) : next,
+    }))
+  const setDays = (next: DayEntry[] | ((prev: DayEntry[]) => DayEntry[])) =>
+    patch((a) => ({
+      ...a,
+      days: typeof next === 'function' ? next(a.days) : next,
+    }))
+
   // Older saves predate some fields; fill the gaps rather than read undefined.
   const snapshot = useMemo<Snapshot>(
-    () => ({ ...SNAPSHOT_DEFAULTS, ...storedSnapshot }),
-    [storedSnapshot],
+    () => ({ ...SNAPSHOT_DEFAULTS, ...openAccount?.snapshot }),
+    [openAccount],
   )
   const account = useMemo<Record<AccountKey, string>>(
-    () => ({ ...accountFor(accountTemplate(DEFAULT_TEMPLATE)), ...rules }),
-    [rules],
+    () => ({
+      ...accountFor(accountTemplate(DEFAULT_TEMPLATE)),
+      ...openAccount?.rules,
+    }),
+    [openAccount],
   )
 
   const templateId = setup?.templateId ?? DEFAULT_TEMPLATE
@@ -456,45 +493,81 @@ export default function App() {
     const next = accountTemplate(result.templateId)
     const taken = Math.max(0, Math.floor(parseAmount(result.payoutsSoFar)))
     const room = Math.max(0, parseAmount(result.payoutBuffer))
-    setSetup({
-      templateId: next.id,
-      terms: result.terms,
-      payoutsSoFar: taken,
-      payoutBuffer: room,
-      approach: result.approach,
-      payoutTaken: result.payoutTaken,
-      strategy: result.strategy,
-      curated: result.curated,
-    })
-    setRules({
-      ...accountFor(next, result.terms, taken, room),
-      // A balance only gets typed once a payout has been taken; before that
-      // it follows from the starting balance plus the profit since.
-      balance: result.payoutTaken
-        ? result.balance
-        : String(next.startingBalance),
-    })
-    appearance.setBrand(firmOf(next).themeId)
-    if (result.approach === 'pointInTime') {
-      setSnapshot({
-        largestProfitDay: result.largestProfitDay,
-        netProfit: result.netProfit,
-        tradingDays: result.tradingDays,
-      })
-    } else {
-      setDays(result.days)
+    const filled: Account = {
+      id: openAccount?.id ?? '',
+      nickname: openAccount?.nickname ?? '',
+      setup: {
+        templateId: next.id,
+        terms: result.terms,
+        payoutsSoFar: taken,
+        payoutBuffer: room,
+        approach: result.approach,
+        payoutTaken: result.payoutTaken,
+        strategy: result.strategy,
+        curated: result.curated,
+      },
+      rules: {
+        ...accountFor(next, result.terms, taken, room),
+        // A balance only gets typed once a payout has been taken; before that
+        // it follows from the starting balance plus the profit since.
+        balance: result.payoutTaken
+          ? result.balance
+          : String(next.startingBalance),
+      },
+      snapshot:
+        result.approach === 'pointInTime'
+          ? {
+              largestProfitDay: result.largestProfitDay,
+              netProfit: result.netProfit,
+              tradingDays: result.tradingDays,
+            }
+          : SNAPSHOT_DEFAULTS,
+      days: result.approach === 'dayByDay' ? result.days : [],
     }
+
+    // A first or added account joins the list; otherwise this is the open one
+    // being set up again.
+    if (!openAccount || adding) {
+      const account = { ...filled, id: newId(), nickname: '' }
+      setAccounts((list) => [...list, account])
+      setCurrentId(account.id)
+    } else {
+      patch(() => filled)
+    }
+
+    appearance.setBrand(firmOf(next).themeId)
     setReconfiguring(false)
+    setAdding(false)
     setDraftTemplate(null)
     brandBeforeDraft.current = null
     document.documentElement.scrollTop = 0
+  }
+
+  /** Switching account carries the app over to that firm's colors too. */
+  function switchTo(id: string) {
+    const to = accounts.find((a) => a.id === id)
+    if (!to) return
+    setCurrentId(id)
+    appearance.setBrand(firmOf(accountTemplate(to.setup.templateId)).themeId)
+    setTakingPayout(false)
+    document.documentElement.scrollTop = 0
+  }
+
+  function removeAccount(id: string) {
+    const fallback = nextCurrent(accounts, id)
+    setAccounts((list) => list.filter((a) => a.id !== id))
+    if (fallback) switchTo(fallback)
+    else setCurrentId('')
   }
 
   if (setup !== null && takingPayout) {
     return (
       <TooltipProvider delayDuration={200}>
         <div className="mx-auto max-w-6xl px-4 sm:px-8">
-          <AppHeader appearance={appearance} account={templateLabel(template)} />
+          <AppHeader
+            appearance={appearance}
+            account={openAccount ? accountName(openAccount, accounts) : ''}
+          />
           <PayoutFlow
             templateId={templateId}
             terms={terms}
@@ -510,11 +583,11 @@ export default function App() {
     )
   }
 
-  if (setup === null || reconfiguring) {
+  if (setup === null || reconfiguring || adding) {
     // The header follows the account being picked, ahead of it being saved,
     // and says nothing until there is one.
-    const shownId = draftTemplate ?? (setup ? templateId : '')
-    const initial: SetupDraft = setup
+    const shownId = draftTemplate ?? (setup && !adding ? templateId : '')
+    const initial: SetupDraft = setup && !adding
       ? {
           firmId: firmOf(template).id,
           programId: template.programId,
@@ -553,6 +626,7 @@ export default function App() {
             onCancel={
               setup
                 ? () => {
+                    setAdding(false)
                     // Back out of the firm's theme as well as its rules.
                     if (brandBeforeDraft.current) {
                       appearance.setBrand(brandBeforeDraft.current)
@@ -616,7 +690,23 @@ export default function App() {
   return (
     <TooltipProvider delayDuration={200}>
       <div className="mx-auto max-w-6xl px-4 pb-16 sm:px-8">
-        <AppHeader appearance={appearance} account={templateLabel(template)}>
+        <AppHeader
+          appearance={appearance}
+          account={
+            <AccountSwitcher
+              accounts={accounts}
+              currentId={openAccount?.id ?? ''}
+              onSwitch={switchTo}
+              onAdd={() => setAdding(true)}
+              onRename={(id, nickname) =>
+                setAccounts((list) =>
+                  list.map((a) => (a.id === id ? { ...a, nickname } : a)),
+                )
+              }
+              onRemove={removeAccount}
+            />
+          }
+        >
           {/* Icon-only on phones so the app name keeps its two lines. */}
           <Button
             variant="ghost"

@@ -3,6 +3,8 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { accountTemplate, firmOf, hasSchedule, sizesFor } from '@/lib/accounts'
+import type { DayEntry } from '@/lib/ledger'
+import type { Account } from '@/lib/portfolio'
 import { BRAND_THEMES } from '@/lib/themes'
 import App from './App'
 
@@ -68,6 +70,17 @@ function seedDashboard() {
     },
     'mpc.rules': WORKBOOK_RULES,
   })
+}
+
+/** The accounts as saved, and the one the app has open. */
+function stored(): Account[] {
+  return JSON.parse(window.localStorage.getItem('mpc.accounts') ?? '[]')
+}
+
+function storedOpen() {
+  const accounts = stored()
+  const id = JSON.parse(window.localStorage.getItem('mpc.current') ?? '""')
+  return accounts.find((a) => a.id === id) ?? accounts[0]
 }
 
 const headline = () => container.querySelector('h1')?.textContent ?? ''
@@ -352,7 +365,7 @@ describe('walkthrough', () => {
 
     expect(headline()).toBe('Two more trading days at $355.70 each')
     expect(text()).toContain('Your numbers')
-    expect(JSON.parse(window.localStorage.getItem('mpc.setup')!)).toMatchObject({
+    expect(storedOpen().setup).toMatchObject({
       templateId: 'mffu-50k-builder',
       approach: 'pointInTime',
       strategy: 'conservative',
@@ -427,7 +440,7 @@ describe('walkthrough', () => {
     press('Show my plan')
 
     expect(headline()).toBe('Four more trading days at $525.00 each')
-    expect(JSON.parse(window.localStorage.getItem('mpc.setup')!)).toMatchObject({
+    expect(storedOpen().setup).toMatchObject({
       strategy: 'curated',
       curated: { mode: 'days', days: 4 },
     })
@@ -640,7 +653,7 @@ describe('walkthrough', () => {
 
     // The older schedule's $52,100 is what the rules were filled in with.
     expect(byLabel('Balance for max payout').value).toBe('52100')
-    expect(JSON.parse(window.localStorage.getItem('mpc.setup')!)).toMatchObject({
+    expect(storedOpen().setup).toMatchObject({
       templateId: 'tradeify-50k-growth',
       terms: 'alt',
       payoutsSoFar: 0,
@@ -790,7 +803,7 @@ describe('walkthrough', () => {
     expect(byLabel('Consistency rule').value).toBe('40')
     expect(container.querySelector('#snapshot-days')).toBeNull()
     expect(document.documentElement.dataset.brand).toBe('topstep')
-    expect(JSON.parse(window.localStorage.getItem('mpc.setup')!)).toMatchObject({
+    expect(storedOpen().setup).toMatchObject({
       templateId: 'topstep-50k-xfa-consistency',
       terms: 'alt',
     })
@@ -1022,11 +1035,11 @@ describe('day-by-day dashboard', () => {
     expect(headline()).toBe('Two more trading days at $670.83 each')
     expect(ledgerRows()).toHaveLength(0)
     expect(byLabel('Current balance').value).toBe('2758.34')
-    expect(JSON.parse(window.localStorage.getItem('mpc.setup')!)).toMatchObject({
+    expect(storedOpen().setup).toMatchObject({
       payoutsSoFar: 1,
       payoutTaken: true,
     })
-    expect(JSON.parse(window.localStorage.getItem('mpc.days')!)).toEqual([])
+    expect(storedOpen().days).toEqual([])
   })
 
   it('turns down a payout bigger than the one allowed', () => {
@@ -1089,6 +1102,122 @@ describe('day-by-day dashboard', () => {
 
     expect(text()).not.toMatch(/\b[A-K]3\b/)
     expect(text()).not.toContain('=MAX')
+  })
+})
+
+/**
+ * The switcher's own menu is driven in AccountSwitcher.test.tsx; what matters
+ * here is that the account it names is the one the app answers to.
+ */
+describe('several accounts', () => {
+  const growth = {
+    id: 'growth',
+    nickname: '',
+    setup: {
+      templateId: 'tradeify-50k-growth',
+      approach: 'dayByDay',
+      payoutTaken: true,
+      // One behind it, so its balance is the typed one rather than derived.
+      payoutsSoFar: 1,
+      strategy: 'conservative',
+    },
+    rules: {
+      balance: '51420.75',
+      startingBalance: '50000',
+      payoutThreshold: '53000',
+      profitGoal: '0',
+      minimumPayout: '500',
+      consistency: '35',
+      minTradingDays: '5',
+      qualifyingDayProfit: '150',
+    },
+    snapshot: { largestProfitDay: '', netProfit: '', tradingDays: '' },
+    days: [] as DayEntry[],
+  }
+  const builder = {
+    id: 'builder',
+    nickname: '',
+    setup: {
+      templateId: 'mffu-50k-builder',
+      approach: 'dayByDay',
+      payoutTaken: true,
+      payoutsSoFar: 0,
+      strategy: 'conservative',
+    },
+    rules: WORKBOOK_RULES,
+    snapshot: { largestProfitDay: '', netProfit: '', tradingDays: '' },
+    days: [
+      { id: 'a', date: '2026-09-08', amount: '400' },
+      { id: 'b', date: '2026-09-09', amount: '400' },
+    ] as DayEntry[],
+  }
+
+  const seedBoth = (currentId: string) =>
+    seed({ 'mpc.accounts': [builder, growth], 'mpc.current': currentId })
+
+  it('moves the one saved account into the list without losing it', () => {
+    // Storage as the app wrote it before accounts had ids.
+    seedDashboard()
+    seed({ 'mpc.days': [{ id: 'a', date: '2026-09-08', amount: '359' }] })
+    render()
+
+    // One logged day of $359, which is the whole of its cycle.
+    expect(headline()).toBe('One more trading day at $359.00')
+    const accounts = stored()
+    expect(accounts).toHaveLength(1)
+    expect(accounts[0].days).toHaveLength(1)
+    expect(accounts[0].setup.templateId).toBe('mffu-50k-builder')
+    expect(header()).toContain('MyFundedFutures 50k Builder')
+    // The keys it came from are left where they were.
+    expect(window.localStorage.getItem('mpc.setup')).not.toBeNull()
+  })
+
+  it('answers to whichever account is open, ledger and firm with it', () => {
+    seedBoth('builder')
+    render()
+    expect(header()).toContain('MyFundedFutures 50k Builder')
+    expect(headline()).toBe('Payout ready')
+    expect(ledgerRows()).toHaveLength(2)
+
+    act(() => root.unmount())
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    seedBoth('growth')
+    render()
+
+    expect(header()).toContain('Tradeify 50k Growth')
+    expect(headline()).not.toBe('Payout ready')
+    expect(ledgerRows()).toHaveLength(0)
+    expect(byLabel('Current balance').value).toBe('51420.75')
+  })
+
+  it('keeps a payout to the account it was taken from', () => {
+    seedBoth('builder')
+    render()
+
+    press('Payout taken')
+    press('Continue')
+    press('Continue')
+    choose('no')
+    press('Start the next cycle')
+
+    const [after, other] = stored()
+    expect(after.setup.payoutsSoFar).toBe(1)
+    expect(after.days).toEqual([])
+    expect(after.rules.balance).toBe('2758.34')
+    // The other account is exactly as it was left.
+    expect(other).toEqual(growth)
+  })
+
+  it('logs a day against the open account alone', () => {
+    seedBoth('growth')
+    render()
+    addDay('2026-09-10', '900')
+
+    const [untouched, open] = stored()
+    expect(open.days).toHaveLength(1)
+    expect(untouched.days).toHaveLength(2)
   })
 })
 
@@ -1257,7 +1386,7 @@ describe('point-in-time dashboard', () => {
 
     expect(headline()).toBe('Three more trading days at $1,050.00 each')
     expect(text()).toContain('lift the profit target from $1,000.00 to $2,100.00')
-    expect(JSON.parse(window.localStorage.getItem('mpc.setup')!).strategy).toBe(
+    expect(storedOpen().setup.strategy).toBe(
       'aggressive',
     )
 
