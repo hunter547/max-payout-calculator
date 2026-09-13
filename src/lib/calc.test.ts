@@ -10,7 +10,7 @@ import {
 } from './calc'
 
 /**
- * The workbook's own row, in template terms: its payout buffer 2100 plus cap
+ * The default account's own numbers, in template terms: payout buffer 2100 plus cap
  * 2000 is the 4100 threshold, and its 500 literal is the minimum payout. The
  * three logged days that produced the largest day and net profit already clear
  * the 50k Builder's two-day minimum.
@@ -31,17 +31,17 @@ const SHEET_INPUTS: CalcInputs = {
 }
 
 describe('calculate — parity with the spreadsheet', () => {
-  it('reproduces every cached formula result in the workbook', () => {
+  it('works the default account out end to end', () => {
     const r = calculate(SHEET_INPUTS)
 
-    expect(r.minimumTargetNetProfit).toBe(500) // E3
-    expect(r.minimumNetProfitRequired).toBe(718) // H3
-    expect(r.remainingProfitNeeded).toBeCloseTo(711.4, 9) // I3
-    expect(r.minimumTradingDaysLeft).toBe(2) // J3
-    expect(r.dailyProfitNeeded).toBeCloseTo(355.7, 9) // K3
+    expect(r.minimumTargetNetProfit).toBe(500)
+    expect(r.minimumNetProfitRequired).toBe(718)
+    expect(r.remainingProfitNeeded).toBeCloseTo(711.4, 9)
+    expect(r.minimumTradingDaysLeft).toBe(2)
+    expect(r.dailyProfitNeeded).toBeCloseTo(355.7, 9)
   })
 
-  it('takes the payout-shortfall branch of E3 when it exceeds the minimum payout', () => {
+  it('takes the payout-shortfall branch when it exceeds the minimum payout', () => {
     // 4100 - 1000 = 3100 of balance still to make, which beats the 500 floor.
     const r = calculate({ ...SHEET_INPUTS, balance: 1000 })
     // On top of the $6.60 already made, since the balance counts that too.
@@ -51,12 +51,12 @@ describe('calculate — parity with the spreadsheet', () => {
     expect(r.remainingProfitNeeded).toBeCloseTo(3100, 9)
   })
 
-  it('takes the consistency branch of H3 when the largest day dominates', () => {
+  it('takes the consistency branch when the largest day dominates', () => {
     const r = calculate({ ...SHEET_INPUTS, largestProfitDay: 900 })
     expect(r.minimumNetProfitRequired).toBe(1800) // 900 / 0.5
   })
 
-  it('uses ABS() on the largest profit day, matching D3', () => {
+  it('uses the size of the largest profit day, whichever way it went', () => {
     const positive = calculate({ ...SHEET_INPUTS, largestProfitDay: 359 })
     const negative = calculate({ ...SHEET_INPUTS, largestProfitDay: -359 })
     expect(negative.minimumNetProfitRequired).toBe(
@@ -65,7 +65,7 @@ describe('calculate — parity with the spreadsheet', () => {
   })
 })
 
-describe('calculate — edge cases the sheet leaves as Excel errors', () => {
+describe('calculate — the edges a plain formula divides by zero on', () => {
   it('reports zero days and zero daily target once the requirement is met', () => {
     const r = calculate({ ...SHEET_INPUTS, currentNetProfit: 1000 })
     expect(r.targetMet).toBe(true)
@@ -75,7 +75,7 @@ describe('calculate — edge cases the sheet leaves as Excel errors', () => {
     expect(r.payoutReady).toBe(true)
   })
 
-  it('degrades to the E3 floor instead of #DIV/0! at 0% consistency', () => {
+  it('degrades to the minimum target instead of dividing by zero at 0% consistency', () => {
     const r = calculate({ ...SHEET_INPUTS, consistencyRequirement: 0 })
     expect(Number.isFinite(r.minimumNetProfitRequired)).toBe(true)
     expect(r.minimumNetProfitRequired).toBe(500)
@@ -83,7 +83,6 @@ describe('calculate — edge cases the sheet leaves as Excel errors', () => {
   })
 
   it('never rounds a whole-number day count up through float dust', () => {
-    // I3 / (H3*G3) lands on exactly 2 here; binary float must not make it 3.
     const r = calculate({
       ...SHEET_INPUTS,
       largestProfitDay: 0,

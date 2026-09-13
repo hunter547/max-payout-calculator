@@ -36,7 +36,7 @@ import {
 } from './accounts'
 
 describe('account templates', () => {
-  it('keeps the workbook account as the default', () => {
+  it('keeps the 50k Builder as the default account', () => {
     const template = accountTemplate(DEFAULT_TEMPLATE)
     expect(templateLabel(template)).toBe('MyFundedFutures 50k Builder')
     expect(template).toMatchObject({
@@ -45,7 +45,7 @@ describe('account templates', () => {
       minTradingDays: 2,
     })
     // The sheet's payout buffer is the floor and its payout cap the one
-    // withdrawal cap, so they still add to the workbook's $4,100.
+    // withdrawal cap, so they still add to its published $4,100.
     expect(template.payout).toMatchObject({
       caps: [2000],
       floor: 2100,
@@ -279,7 +279,7 @@ describe('account templates', () => {
     expect(payoutThreshold(growth50k, 0, 100)).toBe(53000)
     expect(drawdownRoomAt(growth50k, 0, 53000)).toBe(1400)
 
-    // The workbook's payout buffer is withheld, not a fail level, so its
+    // The 50k Builder's payout buffer is withheld, not a fail level, so its
     // threshold is the buffer plus the cap however much room is asked for.
     const builder = accountTemplate('mffu-50k-builder').payout
     expect(builder.floorBreaches).toBeUndefined()
@@ -316,7 +316,7 @@ describe('account templates', () => {
     expect(defaultBuffer(accountTemplate('tradeify-50k-growth'))).toBe(500)
     expect(defaultBuffer(accountTemplate('tradeify-100k-growth'))).toBe(900)
     expect(defaultBuffer(accountTemplate('tradeify-150k-growth'))).toBe(1250)
-    // Nothing to scale against on the workbook's account.
+    // Nothing to scale against on the 50k Builder.
     expect(defaultBuffer(accountTemplate('mffu-50k-builder'))).toBe(
       DEFAULT_PAYOUT_BUFFER,
     )
@@ -433,7 +433,7 @@ describe('account templates', () => {
       (t) => t.programId === 'tradeify-growth',
     ).map((t) => t.qualifyingDayProfit)
     expect(bars).toEqual([100, 150, 200, 250])
-    // The workbook's account counts every day traded.
+    // The 50k Builder counts every day traded.
     expect(accountTemplate('mffu-50k-builder').qualifyingDayProfit).toBe(0)
   })
 

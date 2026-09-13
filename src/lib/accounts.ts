@@ -284,7 +284,7 @@ export const ACCOUNT_TEMPLATES: readonly AccountTemplate[] = [
     },
   },
   {
-    // The workbook's own account: its payout buffer is the floor, and its
+    // The default account: its payout buffer is the floor, and its
     // payout cap the one withdrawal cap, so the two still add to $4,100.
     id: 'mffu-50k-builder',
     programId: 'mffu-builder',
@@ -1054,7 +1054,7 @@ export function defaultBuffer(template: AccountTemplate): number {
   return Math.ceil((template.drawdown * THIN_ROOM_SHARE) / 50) * 50
 }
 
-/** The account the app opens with: the workbook's own 50k Builder. */
+/** The account the app opens with. */
 export const DEFAULT_TEMPLATE = 'mffu-50k-builder'
 
 export function accountTemplate(id: string): AccountTemplate {

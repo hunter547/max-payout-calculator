@@ -1,22 +1,20 @@
 /**
- * The payout maths. Ported cell-for-cell from
- * "MyFundedFutrures 50k Builder Max Payout Calculator.xlsx" (Sheet1), then
- * generalised so other firms' account rules fit the same shape:
+ * The payout maths. Five figures, worked out in order:
  *
- *   E3 Minimum target net profit   =MAX(minimum payout, profit goal,
- *                                        net profit + (threshold - balance))
- *   H3 Minimum net profit required =MAX(E3, ABS(largest day) / consistency)
- *   I3 Remaining profit needed     =H3 - net profit
- *   J3 Minimum trading days left   =CEILING.MATH(I3 / (H3 * consistency))
- *   K3 Daily profit needed         =I3 / J3
+ *   minimum target net profit   = MAX(minimum payout, profit goal,
+ *                                     net profit + (threshold - balance))
+ *   minimum net profit required = MAX(that target, ABS(largest day) / consistency)
+ *   remaining profit needed     = required - net profit
+ *   minimum trading days left   = ceil(remaining / (required * consistency))
+ *   daily profit needed         = remaining / days
  *
- * The workbook's payout buffer + payout cap (2100 + 2000) is the 50k Builder's
- * payout threshold of 4100, and its 500 literal is that firm's minimum payout,
- * so the sheet's own numbers come out unchanged.
+ * The threshold is the balance a max payout needs, which for the 50k Builder
+ * the calculation grew up on is its payout buffer plus its payout cap
+ * (2100 + 2000 = 4100); the minimum payout is that firm's 500.
  *
- * On top of the sheet, a firm can also require a number of trading days since
- * the last payout before it will pay at all, and set the profit a day has to
- * beat before it counts as one of them.
+ * A firm can also require a number of trading days since the last payout
+ * before it will pay at all, and set the profit a day has to beat before it
+ * counts as one of them.
  */
 
 /**
@@ -65,19 +63,19 @@ export interface CalcInputs {
 }
 
 export interface CalcResults {
-  /** E3 */
+  /** What the firm's own rules ask for, before consistency has its say. */
   minimumTargetNetProfit: number
-  /** H3 */
+  /** That target, raised where the consistency rule asks for more. */
   minimumNetProfitRequired: number
-  /** I3 */
+  /** The requirement less the profit already made. */
   remainingProfitNeeded: number
-  /** J3: the days the profit alone needs, before any firm minimum. */
+  /** The days the profit alone needs, before any firm minimum. */
   minimumTradingDaysLeft: number
-  /** K3 */
+  /** The remaining profit split equally over those days. */
   dailyProfitNeeded: number
-  /** H3 * G3 — the largest any single day may be without breaking consistency. */
+  /** Requirement x consistency: the most any single day may be. */
   maxAllowedSingleDay: number
-  /** True once net profit covers the requirement (I3 <= 0). */
+  /** True once net profit covers the requirement. */
   targetMet: boolean
   /** Trading days still needed purely to qualify for a payout. */
   eligibilityDaysLeft: number
@@ -92,9 +90,9 @@ export interface CalcResults {
 }
 
 /**
- * Excel evaluates at 15 significant digits, which hides the binary-float dust
- * that would otherwise push a value like 2.0000000000000004 up to 3 in
- * CEILING.MATH. Round the ratio before ceiling so we match the sheet.
+ * Rounding up is only safe on an exact ratio: binary-float dust turns a true 2
+ * into 2.0000000000000004, and the ceiling of that is 3 — a trading day the
+ * trader does not actually owe. Settle the ratio first, then round it up.
  */
 function ceilingMath(value: number): number {
   const settled = Number(value.toPrecision(12))
@@ -118,22 +116,23 @@ export function calculate(inputs: CalcInputs): CalcResults {
     qualifyingDaysSoFar,
   } = inputs
 
-  // E3 =MAX(minimum payout, threshold - balance), widened by the profit a
-  // firm wants earned since the last payout where it sets one.
+  // The minimum payout, or the balance shortfall, or a profit goal where the
+  // firm sets one: whichever asks for most.
   //
-  // The balance term is a shortfall, but E3 is a total: I3 below takes the
-  // profit already made off it. The balance already counts that profit, so
-  // the shortfall has to be added back onto it, or it comes off twice. The
-  // sheet did it the other way and got away with it only because its own row
-  // sat above the threshold, leaving the minimum payout to set the floor.
+  // The balance term is a shortfall, but this is a total, and the remaining
+  // profit below takes the profit already made off it. The balance already
+  // counts that profit, so the shortfall has to be added onto it, or it comes
+  // off twice — a mistake that hides on accounts whose balance starts above
+  // the threshold and shows plainly on one starting at zero.
   const minimumTargetNetProfit = Math.max(
     minimumPayout,
     profitGoal,
     currentNetProfit + (payoutThreshold - balance),
   )
 
-  // H3 =MAX(E3, ABS(D3)/G3).  Excel yields #DIV/0! at G3=0; we fall back to the
-  // E3 floor so the UI can keep rendering while flagging the input as invalid.
+  // Raised where the consistency rule asks for more than the firm's own
+  // figures do. A rule of zero divides by zero, so it falls back to the target
+  // and the UI flags the input rather than rendering nothing.
   const consistencyDriven =
     consistency > 0 ? Math.abs(largestProfitDay) / consistency : 0
   const minimumNetProfitRequired = Math.max(
@@ -141,20 +140,18 @@ export function calculate(inputs: CalcInputs): CalcResults {
     consistencyDriven,
   )
 
-  // I3 =H3-F3
   const remainingProfitNeeded = minimumNetProfitRequired - currentNetProfit
 
   const maxAllowedSingleDay = minimumNetProfitRequired * consistency
   const targetMet = remainingProfitNeeded <= 0
 
-  // J3 =CEILING.MATH(I3/(H3*G3)).  The sheet returns 0 (then K3 -> #DIV/0!) once
-  // the target is already met; we short-circuit both to 0 instead.
+  // Days are the remaining profit over the daily cap, rounded up. With the
+  // target already met there is nothing to divide, so both figures are zero.
   const minimumTradingDaysLeft =
     targetMet || maxAllowedSingleDay <= 0
       ? 0
       : ceilingMath(remainingProfitNeeded / maxAllowedSingleDay)
 
-  // K3 =I3/J3
   const dailyProfitNeeded =
     minimumTradingDaysLeft > 0
       ? remainingProfitNeeded / minimumTradingDaysLeft
@@ -195,7 +192,8 @@ export function calculate(inputs: CalcInputs): CalcResults {
 
 /**
  * Conservative: the spreadsheet's plan. Every planned day stays at or under
- * today's daily cap (H3 × G3, i.e. the default cap or the largest profit day,
+ * today's daily cap (requirement x consistency, i.e. the default cap or the
+ * largest profit day,
  * whichever is higher), so the target never moves.
  *
  * Aggressive: the fewest days to payout, however big each day has to be.
@@ -244,7 +242,8 @@ export interface Plan {
  * T = F + n·x:
  *   T >= E                  (minimum target)
  *   max(D, x) <= G·T        (consistency, counting the new days)
- * Together those give x >= I3 / n, plus x·(1 − G·n) <= G·F. Once some n is
+ * Together those give x >= (remaining profit) / n, plus x·(1 − G·n) <= G·F.
+ * Once some n is
  * possible, every larger n is too.
  */
 function dailyFor(
@@ -281,7 +280,7 @@ function dailyFor(
  * Fewest equal days that reach the profit target. Equal days are optimal: for
  * a given total they keep the largest day as small as possible. The
  * conservative plan always satisfies the same rules, so this never needs more
- * than J3 days.
+ * days than that one does.
  */
 function fewestProfitDays(
   inputs: CalcInputs,
@@ -392,7 +391,8 @@ export function curatedPlan(
   }
 
   if (!(choice.cap > 0)) return null
-  // Each day is at least I3 / n, so no plan under the cap is shorter than this.
+  // Each day is at least the remaining profit over n, so no plan under the cap
+  // is shorter than this.
   const start = Math.max(
     fastest,
     Math.ceil(results.remainingProfitNeeded / choice.cap - 1e-9),

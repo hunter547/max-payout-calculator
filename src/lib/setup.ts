@@ -307,7 +307,7 @@ export function resolvePlan(
 
 /**
  * Storage written before the walkthrough existed has logged days but no
- * setup. Treat it as day-by-day on the workbook's own account, which is how
+ * setup. Treat it as day-by-day on the default account, which is how
  * that version worked, so returning users skip the walkthrough.
  */
 export function legacySetup(): Setup | null {

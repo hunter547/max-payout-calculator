@@ -21,7 +21,7 @@ class ResizeObserverStub {
 globalThis.ResizeObserver ??=
   ResizeObserverStub as unknown as typeof ResizeObserver
 
-/** The workbook's own account: MyFundedFutures 50k Builder. */
+/** The default account: MyFundedFutures 50k Builder. */
 const WORKBOOK_RULES = {
   balance: '4758.34',
   startingBalance: '0',
@@ -60,7 +60,7 @@ function seed(values: Record<string, unknown>) {
   }
 }
 
-/** Skip the walkthrough: day-by-day, payout taken, the workbook's account. */
+/** Skip the walkthrough: day-by-day, payout taken, the default account. */
 function seedDashboard() {
   seed({
     'mpc.setup': {
@@ -150,7 +150,7 @@ function choose(value: string) {
 }
 
 /**
- * Past the account screens, on the workbook's account by default, and with a
+ * Past the account screens, on the default account, and with a
  * payout behind you so the balance is asked for rather than worked out.
  */
 function toApproach(templateId = 'mffu-50k-builder', payouts = 1) {
@@ -359,7 +359,7 @@ describe('walkthrough', () => {
     )
   })
 
-  it('point-in-time: the workbook numbers reproduce its plan', () => {
+  it('point-in-time: the default account reproduces its plan', () => {
     render()
     pointInTimeTo('4758.34', '359', '6.6')
 
@@ -892,7 +892,7 @@ describe('day-by-day dashboard', () => {
 
   it('derives largest day and net profit from daily entries', () => {
     render()
-    // A history that reproduces the workbook's saved largest day and net.
+    // A history that reproduces the default account's largest day and net.
     addDay('2026-09-08', '359')
     addDay('2026-09-09', '-212.40')
     addDay('2026-09-10', '-140')
@@ -1401,7 +1401,7 @@ describe('point-in-time dashboard', () => {
   })
 
   it('holds the plan open until the minimum trading days are met', () => {
-    // The workbook's own two days are what 50% consistency takes anyway, so
+    // The 50k Builder's two days are what 50% consistency takes anyway, so
     // this raises the rule to one that can actually bind.
     seedPointInTime('359', '800', '3')
     seed({ 'mpc.rules': { ...WORKBOOK_RULES, minTradingDays: '9' } })

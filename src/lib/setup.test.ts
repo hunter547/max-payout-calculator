@@ -434,7 +434,7 @@ describe('legacySetup', () => {
     expect(legacySetup()).toBeNull()
   })
 
-  it('keeps returning users on day-by-day on the workbook account', () => {
+  it('keeps returning users on day-by-day on the default account', () => {
     window.localStorage.setItem(
       'mpc.days',
       JSON.stringify([{ id: 'a', date: '2026-09-08', amount: '359' }]),

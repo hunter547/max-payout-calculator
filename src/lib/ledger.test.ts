@@ -61,7 +61,7 @@ describe('summarize — qualifying days', () => {
 
 describe('summarize', () => {
   it('derives the spreadsheet inputs from daily entries', () => {
-    // A history that reproduces the workbook's D3=359 and F3=6.6.
+    // A history whose largest day is 359 and whose net profit is 6.6.
     const s = summarize([
       day('a', '2026-09-08', '359'),
       day('b', '2026-09-09', '-212.40'),

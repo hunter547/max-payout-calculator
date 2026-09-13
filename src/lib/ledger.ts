@@ -1,8 +1,8 @@
 /**
  * The daily P&L ledger since the last payout. It derives the two spreadsheet
  * inputs the trader used to type by hand:
- *   D3 Largest Profit Day  -> largestProfitDay
- *   F3 Current Net Profit  -> netProfit
+ *   largest profit day -> largestProfitDay
+ *   cumulative profit  -> netProfit
  */
 
 export interface DayEntry {

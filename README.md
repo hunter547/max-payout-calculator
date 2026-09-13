@@ -8,12 +8,11 @@ Pick your prop firm, account type and size, and the firm's rules fill in for
 you. MyFundedFutures and Tradeify accounts ship with the app; see
 [Account templates](#account-templates).
 
-The calculations began as a cell-for-cell port of a MyFundedFutures 50k
-Builder spreadsheet, whose account is still the app's default template. That
-workbook is no longer kept here: the app covers rules it never had, and in
-four places the sheet was simply wrong — see [Deliberate differences from the
-spreadsheet](#deliberate-differences-from-the-spreadsheet), which the tests
-pin so the port cannot drift back.
+The calculation began life as a MyFundedFutures 50k Builder spreadsheet, whose
+account is still the app's default template. That workbook is not kept here:
+the app covers rules it never had, and the formula it reached for is wrong in
+four places — see [Where the obvious formula goes
+wrong](#where-the-obvious-formula-goes-wrong), each pinned by a test.
 
 ## Running it
 
@@ -120,14 +119,14 @@ asked for, and the balance is typed rather than worked out.
   most the next payout may withdraw, and how many of the firm's trading days
   you have.
 
-Your numbers map to the sheet like this:
+Three numbers drive everything, and each comes from one of two places:
 
-| Sheet cell | Point-in-time | Day-by-day |
-|------------|---------------|------------|
-| `A3` Balance | entered | entered after a payout, else starting balance plus logged days |
-| `D3` Largest Profit Day | entered | biggest winning day (0 until you have one) |
-| `F3` Current Net Profit | entered | sum of every day, losses included |
-| trading days | entered | logged days that clear the firm's profit bar |
+| Number | Point-in-time | Day-by-day |
+|--------|---------------|------------|
+| Balance | entered | entered after a payout, else starting balance plus logged days |
+| Largest profit day | entered | biggest winning day (0 until you have one) |
+| Cumulative net profit | entered | sum of every day, losses included |
+| Trading days | entered | logged days that clear the firm's profit bar |
 
 Everything is saved in your browser's `localStorage` — `mpc.accounts` holds
 every account (its setup, rules, numbers and logged days), `mpc.current` says
@@ -325,9 +324,9 @@ max(qualifyingBalance, floor + cap + buffer, cap / withdrawShare)
 ```
 
 which is the number written into the dashboard's "Balance for max payout".
-The workbook's own account is the simple case: its payout buffer is the floor
-($2,100) and its payout cap the one withdrawal cap ($2,000), so they still add
-to $4,100 whatever the payout number. Its buffer is withheld rather than a fail
+The MyFundedFutures 50k Builder is the simple case: its payout buffer is the
+floor ($2,100) and its payout cap the one withdrawal cap ($2,000), so they
+still add to $4,100 whatever the payout number. Its buffer is withheld rather than a fail
 level, so `buffer` does not apply to it.
 
 The Builder 25k is the same rules halved, which is what confirms the shape: its
@@ -414,8 +413,8 @@ Accounts](https://help.tradeify.co/en/articles/10495915-growth-evaluation-accoun
 and [Rules: Trailing Max
 Drawdowns](https://help.tradeify.co/en/articles/10495897-rules-trailing-max-drawdowns).
 
-The MyFundedFutures 50k Builder is the default and the workbook's own account,
-so its numbers are the ones the calculation tests pin. It is no longer the
+The MyFundedFutures 50k Builder is the default, and the account the calculation
+grew up on, so its numbers are the ones the calculation tests pin. It is no longer the
 first entry in the registry, so `accountTemplate` falls back to it by id rather
 than by position. Template ids keep the
 old `firm-size-type` spelling (`mffu-50k-builder`), so saved setups survive.
@@ -495,7 +494,7 @@ A day is not always a day. Tradeify only counts one towards the minimum if it
 makes **more** than a figure set by account size — $100, $150, $200 and $250
 across the Growth sizes — so a small green day, a flat day and a losing day all
 count for nothing. MyFundedFutures counts every day traded, which is
-`qualifyingDayProfit: 0` and leaves the workbook's behaviour alone.
+`qualifyingDayProfit: 0` and leaves the day count alone.
 
 That figure changes three things:
 
@@ -522,43 +521,46 @@ to count**.
 
 ## The calculations
 
-[`src/lib/calc.ts`](src/lib/calc.ts) is a cell-for-cell port of `Sheet1`:
+[`src/lib/calc.ts`](src/lib/calc.ts) works five figures out in order, and every
+one of them is a field on `CalcResults`:
 
-| Cell | Name | Formula |
-|------|------|---------|
-| `E3` | Minimum target net profit | `=MAX(minimum payout, profit goal, F3 + (threshold - A3))` |
-| `H3` | Minimum net profit required | `=MAX(E3, ABS(D3)/G3)` |
-| `I3` | Remaining profit needed | `=H3-F3` |
-| `J3` | Minimum trading days left | `=CEILING.MATH(I3/(H3*G3))` |
-| `K3` | Daily profit needed (equal split) | `=I3/J3` |
+| Figure | How it is worked out |
+|--------|----------------------|
+| **Minimum target net profit** | the largest of: the firm's minimum payout, any profit goal, and the profit already made plus whatever the balance is short of the one a max payout needs |
+| **Minimum net profit required** | that target, or `largest day ÷ consistency` if the consistency rule asks for more |
+| **Remaining profit needed** | the requirement less the profit already made |
+| **Minimum trading days left** | the remaining profit over the daily cap, rounded up |
+| **Daily profit needed** | the remaining profit split equally over those days |
 
-The sheet writes `E3` as `=MAX(500, (B3+C3)-A3)`: its $500 is the firm's minimum
-payout, and its payout buffer plus payout cap ($2,100 + $2,000) is the $4,100
-balance a max payout needs. The app keeps those as two template fields, minimum
-payout and balance for max payout, which every firm has in some form.
+The two firm figures behind the first line — the minimum payout and the balance
+a max payout needs — are template fields, because every firm has both in some
+form. On the default account the balance is the payout buffer plus the payout
+cap: $2,100 + $2,000 = $4,100.
 
-`H3 × G3` is the **daily cap**: the most one day can contribute without breaking
-the consistency rule. Because `H3` is at least `largest day ÷ G3`, your largest
-day can never exceed the cap, and `J3` spreads the remaining profit so each
-planned day stays under it too. Make a bigger day than the cap and `H3` rises.
+`requirement × consistency` is the **daily cap**: the most one day can
+contribute without breaking the consistency rule. Because the requirement is at
+least `largest day ÷ consistency`, your largest day can never exceed the cap,
+and the day count spreads the remaining profit so each planned day stays under
+it too. Make a bigger day than the cap and the requirement rises with it.
 
-[`src/lib/ledger.ts`](src/lib/ledger.ts) turns logged days into `D3` and `F3`,
-and dates the planned days on the next weekdays, starting no earlier than today.
+[`src/lib/ledger.ts`](src/lib/ledger.ts) turns logged days into the largest day
+and the cumulative profit, and dates the planned days on the next weekdays,
+starting no earlier than today.
 
 ### Conservative, aggressive, and curated plans
 
 Switch between them with the **Plan** toggle above the chart.
 
-- **Conservative** is the spreadsheet's plan: `J3` days of `K3`. Every planned
-  day stays at or under the daily cap, which is the default cap (`E3 × G3`) or
-  your largest profit day, whichever is higher. Your largest day never grows,
-  so the target never moves.
+- **Conservative** is the plain plan: the minimum trading days left, each at
+  the daily profit needed. Every planned day stays at or under the daily cap,
+  which is `target × consistency` or your largest profit day, whichever is
+  higher. Your largest day never grows, so the target never moves.
 - **Aggressive** is the fewest days to payout, whatever each day has to make.
   Days bigger than your largest day raise the target, and the plan counts that.
 
 For `n` equal days of `x`, with `F` = net profit, `D` = largest day, `E` =
 minimum target and `G` = consistency, the final total `T = F + n·x` must satisfy
-`T ≥ E` and `max(D, x) ≤ G·T`. That reduces to `x ≥ I3 / n` plus
+`T ≥ E` and `max(D, x) ≤ G·T`. That reduces to `x ≥ (remaining profit) / n` plus
 `x·(1 − G·n) ≤ G·F`, and `planFor` in `calc.ts` takes the smallest `n` where a
 valid `x` exists. Equal days are optimal, since for a given total they keep the
 largest day as small as possible, and the conservative plan always satisfies
@@ -583,38 +585,38 @@ usually agree, and the walkthrough says so when they do.
   plan. A cap that would take more than 252 trading days (a year) is turned
   away.
 
-### Deliberate differences from the spreadsheet
+### Where the obvious formula goes wrong
 
-The sheet leaves three situations as raw Excel errors, and states `E3` in a way
-that only works when the balance is already past the threshold. The app handles
-all four, and the tests pin each one:
+Four things bite anyone writing this calculation, the original spreadsheet
+included. Each has a test on it:
 
-1. **Target already met** (`I3 <= 0`). The sheet gives `K3 = #DIV/0!`. The app
-   shows "Payout ready", or the trading days still to go.
-2. **Zero consistency rule** (`G3 = 0`). `ABS(D3)/G3` is `#DIV/0!` in Excel. The
-   app flags the field and falls back to the minimum target.
-3. **Floating-point dust in `CEILING.MATH`.** Excel evaluates at 15 significant
-   digits; IEEE 754 doesn't, so a ratio of exactly `2` can land on
-   `2.0000000000000004` and round up to `3`. The port settles the ratio to 12
+1. **The target is already met.** With no profit left to make, the daily split
+   divides by zero. The app shows "Payout ready", or the trading days still to
+   go.
+2. **A consistency rule of zero.** `largest day ÷ consistency` divides by zero
+   too. The app flags the field and falls back to the minimum target rather
+   than rendering nothing.
+3. **Floating-point dust in the day count.** Rounding a ratio up is only safe
+   if the ratio is exact: a true `2` can arrive as `2.0000000000000004` and
+   round to `3`, costing a day that is not needed. The ratio is settled to 12
    significant digits first.
-4. **The balance shortfall counted twice.** The sheet writes `E3` as
-   `MAX(500, (B3+C3)-A3)` — a *shortfall* — but `I3 = H3 - F3` then takes the
-   profit already made off it, and the balance in `A3` already counts that
-   profit. Subtracting it twice leaves a plan that stops short of the balance
-   it was aiming at. The sheet never showed it, because its own row sat above
-   the threshold and the $500 floor took over.
+4. **The balance shortfall counted twice.** It is natural to write the target
+   as "what the balance is short of the one a payout needs" — but the remaining
+   profit then takes the profit already made off it, and the balance already
+   counts that profit. Subtracting it twice leaves a plan that stops short of
+   the balance it was aiming at.
 
-   It shows plainly on an account whose balance starts at $0. A Topstep 50k
-   with a Daily Loss Limit needs $12,000; one day of $2,269.32 in, the sheet's
-   `E3` asks for $9,730.68 of profit, so the plan lands on $9,730.68 — still
-   $2,269.32 short. The app adds the shortfall to the profit already made, so
-   `E3` is the $12,000 it actually has to reach, and three days of $3,243.56
-   land on it exactly.
+   It hides on an account whose balance starts high and shows plainly on one
+   that starts at $0. A Topstep 50k with a Daily Loss Limit needs $12,000; one
+   day of $2,269.32 in, the shortfall form asks for $9,730.68 of profit, so the
+   plan lands on $9,730.68 — still $2,269.32 short. Adding the shortfall to the
+   profit already made makes the target the $12,000 it actually has to reach,
+   and three days of $3,243.56 land on it exactly.
 
    `pays()` in the tests is written from the payout's own terms — the balance
    reaches the threshold, the profit clears the minimum and any goal, the
-   consistency rule holds — rather than from `E3`, so it can catch this rather
-   than restate it.
+   consistency rule holds — rather than from the formula, so it can catch a
+   mistake like this rather than restate it.
 
 ## Design
 
@@ -652,10 +654,10 @@ in `src/lib/utils.ts`. If the CLI installs `cn` into `package.json`, remove it.
 ## Tests
 
 - `src/lib/calc.test.ts`: a profit goal takes over from the balance shortfall
-  where it is larger, and leaves accounts without one untouched. The port
-  reproduces every cached formula result in
-  the workbook (`E3=500`, `H3=718`, `I3=711.4`, `J3=2`, `K3=355.7`) from its
-  saved inputs, plus the branch and edge cases above. The aggressive plan is
+  where it is larger, and leaves accounts without one untouched. The default
+  account's own figures are pinned end to end — a $500 target, $718 required,
+  $711.40 remaining, 2 days, $355.70 a day — plus the branch and edge cases
+  above. The aggressive plan is
   checked across a sweep of balances, drawdowns, largest days, and consistency
   rules: it always pays out, is never slower than conservative, and a brute-force
   search confirms no daily amount gets there a day sooner. Across the same
@@ -672,15 +674,15 @@ in `src/lib/utils.ts`. If the CLI installs `cn` into `package.json`, remove it.
 - `src/lib/accounts.test.ts`: every template's rules, the split of an account
   into its size and type, the published payout tables (both Tradeify schedules,
   the caps that repeat, and the thresholds they imply), that each size belongs
-  to a registered type and each firm to a theme and a logo, and that the app's
-  default is the workbook's account.
+  to a registered type and each firm to a theme and a logo, and which account
+  the app opens on by default.
 - `src/lib/setup.test.ts`: which walkthrough screens each path shows, including
   dropping the size screen for a single-size type and the schedule screen for
   an account without one, how each template derives the balance and counts only
   the logged days that clear its bar, and detecting storage from before the
   walkthrough.
 - `src/App.test.tsx`: mounts the app in jsdom and walks both walkthrough paths
-  to the workbook's `$355.70` a day, covers picking a firm (the theme follows
+  to the default account's `$355.70` a day, covers picking a firm (the theme follows
   at once), then a type and a size (their rules follow), the size screen
   offering only that type's sizes and being skipped when there is only one,
   the payout flow (what a payout may be, the balance it leaves, the cycle it
