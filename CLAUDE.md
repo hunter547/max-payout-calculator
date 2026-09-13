@@ -40,3 +40,9 @@ npm run lint
 Match the surrounding code: comments explain *why* a rule is shaped the way it
 is, usually in the firm's own words, and the tests pin firms' published tables
 rather than computed numbers.
+
+**Do not run Prettier over this repo.** There is no config, so it applies its
+own defaults — double quotes and semicolons, against the codebase's single
+quotes and none — and `--check` disagrees with 36 files. Running it on one file
+once buried a small change under a 358-line restyle. Format by hand, in the
+style of the file you are editing.
