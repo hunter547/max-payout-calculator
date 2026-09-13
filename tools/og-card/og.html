@@ -78,20 +78,19 @@
         gap: 18px;
       }
       /* Three of the marks carry their own ground and cover the tile; the
-         other two are bare art, so the tile is what they sit on — the same
-         dark plate the app puts them on in light mode. */
+         other two are bare art, and sit on a sheet-white one — which keeps the
+         row light rather than turning it into five dark squares. */
       .firms .tile {
         width: 76px;
         height: 76px;
         border-radius: 18px;
-        background: #0b0d14;
+        background: var(--sheet);
         display: grid;
         place-items: center;
         overflow: hidden;
         box-shadow: 0 1px 0 rgba(24, 33, 43, 0.12), 0 8px 20px rgba(24, 33, 43, 0.1);
       }
       .firms .tile img { width: 76px; height: 76px; display: block; }
-      .firms .tile.inset img { width: 58px; height: 58px; }
       .firms .rule {
         width: 1px;
         height: 52px;
@@ -136,7 +135,7 @@
     </div>
 
     <div class="firms">
-      <span class="tile inset"><img src="../../src/assets/brands/mffu-icon.svg" alt="" /></span>
+      <span class="tile"><img src="../../src/assets/brands/mffu-icon.svg" alt="" /></span>
       <span class="tile"><img src="../../src/assets/brands/tradeify-icon.svg" alt="" /></span>
       <span class="tile"><img src="../../src/assets/brands/topstep-icon.svg" alt="" /></span>
       <span class="tile"><img src="../../src/assets/brands/lucid-icon.svg" alt="" /></span>

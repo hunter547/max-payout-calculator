@@ -29,10 +29,11 @@ Image.open('og-2x.png').resize((1200, 630), Image.LANCZOS) \
 
 Two things worth keeping:
 
-- **Every icon sits on the same dark tile.** Three of them carry their own
-  ground and cover it; MyFundedFutures' shield and Lucid's sphere are bare art
-  and would otherwise float on the page, so the tile is the dark plate the app
-  itself puts them on in light mode.
+- **Every icon sits on the same tile, and the tile is sheet white.** Three of
+  them carry their own ground and cover it; MyFundedFutures' shield and Lucid's
+  sphere are bare art and would otherwise float on the page. A dark plate works
+  too and is what the app uses in light mode, but on this card it turns the row
+  into five dark squares — the white one keeps it light.
 - **Leave it full colour.** Quantising to 256 colours takes the file from
   ~180 KB to ~65 KB but dithers visibly across Lucid's sphere and Apex's
   gradient, which is the part of the card that looks most like a product.
