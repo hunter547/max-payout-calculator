@@ -427,6 +427,11 @@ plus a `cutoff` if its sizes carry a before-cutoff schedule. To add a firm, add 
 `src/lib/themes.ts`. The walkthrough's three screens, the dashboard picker, and
 the footer's list of firms all follow from the registries.
 
+Adding a whole firm is more than the registry — a theme, a font, two SVGs, and
+rules read off the firm's own help center. The full procedure, including what
+each firm so far needed that the model could not yet say, is in
+[`.claude/skills/add-prop-firm/SKILL.md`](.claude/skills/add-prop-firm/SKILL.md).
+
 ### Where the logos go
 
 A firm's logo appears wherever its account does — on the walkthrough's firm
