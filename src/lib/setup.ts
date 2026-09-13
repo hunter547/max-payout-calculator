@@ -106,7 +106,10 @@ export function balanceHint(templateId: string): string {
 }
 
 export function stepsFor(
-  draft: Pick<SetupDraft, 'approach' | 'payoutTaken' | 'programId' | 'templateId'>,
+  draft: Pick<
+    SetupDraft,
+    'approach' | 'payoutTaken' | 'programId' | 'templateId' | 'payoutsSoFar'
+  >,
 ): StepId[] {
   // A type that comes in one size has nothing to ask, so its screen is
   // dropped and the size is filled in with the type.
@@ -122,21 +125,29 @@ export function stepsFor(
     account.push('payouts')
   }
 
+  // Every account answers where it is in its payouts: as a count where the
+  // schedule asks for one, and as a yes or no where it does not.
+  if (!account.includes('payouts')) account.push('payout')
+
+  // Before a payout the balance is where the account started plus the profit
+  // since, whichever way that profit is given, so there is nothing to ask.
+  const balance: StepId[] = hasTakenPayout(draft) ? ['balance'] : []
+
   if (draft.approach === 'dayByDay') {
-    return draft.payoutTaken
-      ? [...account, 'approach', 'payout', 'balance', 'days', 'strategy']
-      : [...account, 'approach', 'payout', 'days', 'strategy']
+    return [...account, 'approach', ...balance, 'days', 'strategy']
   }
-  // A firm with no minimum has no trading days to ask about.
+  // Nothing to ask where the firm sets no minimum, or where its minimum is
+  // one the consistency rule reaches on its own.
+  const template = draft.templateId ? accountTemplate(draft.templateId) : null
   const days: StepId[] =
-    draft.templateId && accountTemplate(draft.templateId).minTradingDays > 0
+    template && tradingDaysBind(template.minTradingDays, template.consistency)
       ? ['tradingDays']
       : []
 
   return [
     ...account,
     'approach',
-    'balance',
+    ...balance,
     'largest',
     'cumulative',
     ...days,
@@ -145,10 +156,54 @@ export function stepsFor(
 }
 
 /**
+ * Trading days the consistency rule forces on its own. At payout time no day
+ * may top `consistency` of the net profit, and the net is at most the day
+ * count times the largest day, so the count is at least 1 / consistency.
+ */
+export function impliedTradingDays(consistency: number): number {
+  return consistency > 0 ? Math.ceil(1 / consistency - 1e-9) : 0
+}
+
+/**
+ * Whether a firm's minimum trading days asks for more than the consistency
+ * rule already forces. A MyFundedFutures Builder wants two days at 50%, which
+ * takes two days anyway, so there is nothing to ask and nothing to hold a plan
+ * back; a Tradeify Growth wants five at 35%, which takes three, so it binds.
+ */
+export function tradingDaysBind(
+  minTradingDays: number,
+  consistency: number,
+): boolean {
+  return minTradingDays > impliedTradingDays(consistency)
+}
+
+/** Payouts already taken, as a number, from a draft's own typing. */
+export function payoutsTaken(draft: Pick<SetupDraft, 'payoutsSoFar'>): number {
+  return Math.max(0, Math.floor(parseAmount(draft.payoutsSoFar)))
+}
+
+/**
+ * Whether a balance has to be typed rather than worked out from logged days:
+ * once a payout has been taken, the days since it no longer add up to the
+ * balance. The payout count answers it where the schedule screen asks for one.
+ */
+export function hasTakenPayout(
+  draft: Pick<SetupDraft, 'payoutTaken' | 'templateId' | 'payoutsSoFar'>,
+): boolean {
+  return draft.templateId && hasSchedule(accountTemplate(draft.templateId))
+    ? payoutsTaken(draft) > 0
+    : draft.payoutTaken === true
+}
+
+/**
  * The calculator's inputs for either approach. Point-in-time uses the numbers
- * as typed; day-by-day derives largest day, net profit, and the trading days
- * from the ledger, and before any payout the balance too, by adding the logged
- * days to where the account started.
+ * as typed; day-by-day derives largest day, net profit and the trading days
+ * from the ledger.
+ *
+ * Either way, the balance is only asked for once a payout has been taken.
+ * Before that it is where the account started plus the profit since, so asking
+ * would be asking the same number twice — and on an account that starts at
+ * zero, like a MyFundedFutures Builder, it is the same number exactly.
  */
 export function deriveInputs(
   source: {
@@ -163,29 +218,38 @@ export function deriveInputs(
   account: Record<AccountKey, string>,
 ): CalcInputs {
   const pointInTime = source.approach === 'pointInTime'
-  const balanceEntered = pointInTime || source.payoutTaken
   const startingBalance = parseAmount(account.startingBalance)
+  const consistency = parseAmount(account.consistency) / 100
+  const minTradingDays = Math.max(
+    0,
+    Math.round(parseAmount(account.minTradingDays)),
+  )
+
+  const currentNetProfit = pointInTime
+    ? parseAmount(source.netProfit)
+    : summary.netProfit
 
   return {
-    balance: balanceEntered
+    balance: source.payoutTaken
       ? parseAmount(source.balance)
-      : startingBalance + summary.netProfit,
+      : startingBalance + currentNetProfit,
     payoutThreshold: parseAmount(account.payoutThreshold),
     minimumPayout: parseAmount(account.minimumPayout),
     profitGoal: Math.max(0, parseAmount(account.profitGoal)),
     largestProfitDay: pointInTime
       ? parseAmount(source.largestProfitDay)
       : summary.largestProfitDay,
-    currentNetProfit: pointInTime
-      ? parseAmount(source.netProfit)
-      : summary.netProfit,
-    consistencyRequirement: parseAmount(account.consistency) / 100,
-    minTradingDays: Math.max(0, Math.round(parseAmount(account.minTradingDays))),
+    currentNetProfit,
+    consistencyRequirement: consistency,
+    minTradingDays,
     // Point-in-time asks for the days that count; day-by-day works out which
-    // of the logged days clear the firm's bar.
-    tradingDaysSoFar: pointInTime
-      ? Math.max(0, Math.round(parseAmount(source.tradingDays)))
-      : summary.qualifyingDays,
+    // of the logged days clear the firm's bar. Where the minimum is one the
+    // consistency rule reaches anyway, it is never asked for and never short.
+    tradingDaysSoFar: !pointInTime
+      ? summary.qualifyingDays
+      : tradingDaysBind(minTradingDays, consistency)
+        ? Math.max(0, Math.round(parseAmount(source.tradingDays)))
+        : minTradingDays,
     qualifyingDayProfit: Math.max(
       0,
       parseAmount(account.qualifyingDayProfit),

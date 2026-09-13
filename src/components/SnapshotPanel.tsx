@@ -1,6 +1,7 @@
 import { MoneyField } from '@/components/MoneyField'
 import { formatRule } from '@/lib/format'
 import { isAmount } from '@/lib/ledger'
+import { cn } from '@/lib/utils'
 import type { Snapshot } from '@/lib/setup'
 
 interface SnapshotPanelProps {
@@ -8,6 +9,8 @@ interface SnapshotPanelProps {
   onSnapshotChange: (patch: Partial<Snapshot>) => void
   /** Profit a day must beat to count, where the firm sets one. */
   qualifyingDayProfit: number
+  /** False where the firm's minimum is one the consistency rule reaches. */
+  asksTradingDays: boolean
 }
 
 const looksWrong = (value: string) => value !== '' && !isAmount(value)
@@ -17,6 +20,7 @@ export function SnapshotPanel({
   snapshot,
   onSnapshotChange,
   qualifyingDayProfit,
+  asksTradingDays,
 }: SnapshotPanelProps) {
   return (
     <section aria-labelledby="snapshot-heading" className="min-w-0">
@@ -28,7 +32,12 @@ export function SnapshotPanel({
         updates as you type.
       </p>
 
-      <div className="mt-5 grid gap-5 sm:grid-cols-3">
+      <div
+        className={cn(
+          'mt-5 grid gap-5',
+          asksTradingDays ? 'sm:grid-cols-3' : 'sm:grid-cols-2',
+        )}
+      >
         <MoneyField
           id="snapshot-largest"
           label="Largest profit day"
@@ -45,6 +54,7 @@ export function SnapshotPanel({
           invalid={looksWrong(snapshot.netProfit)}
           onChange={(v) => onSnapshotChange({ netProfit: v })}
         />
+        {asksTradingDays && (
         <MoneyField
           id="snapshot-days"
           label="Trading days so far"
@@ -58,6 +68,7 @@ export function SnapshotPanel({
           invalid={looksWrong(snapshot.tradingDays)}
           onChange={(v) => onSnapshotChange({ tradingDays: v })}
         />
+        )}
       </div>
     </section>
   )

@@ -48,6 +48,7 @@ import {
 import {
   balanceHint,
   deriveInputs,
+  hasTakenPayout,
   resolvePlan,
   stepsFor,
   toCuratedChoice,
@@ -75,24 +76,30 @@ interface WalkthroughProps {
   onCancel?: () => void
 }
 
+/**
+ * What each approach will ask for, in the order the screens ask it. Two of the
+ * lines are conditional: a balance is only asked for once a payout has been
+ * taken, and trading days only where a firm's minimum tops what its
+ * consistency rule already takes.
+ */
 const APPROACHES: {
   value: Approach
   title: string
   summary: string
-  provides: ReactNode[]
+  provides: (asked: { balance: boolean; days: boolean }) => ReactNode[]
 }[] = [
   {
     value: 'pointInTime',
     title: 'Point-in-time',
     summary: 'Copy a few numbers from your account. The quickest way to an answer.',
-    provides: [
-      'Current balance',
+    provides: ({ balance, days }) => [
+      ...(balance ? ['Current balance'] : []),
       'Largest profit day',
       <>
         Cumulative profit,{' '}
         <strong className="font-semibold">which resets after each payout</strong>
       </>,
-      'Trading days so far',
+      ...(days ? ['Trading days so far'] : []),
     ],
   },
   {
@@ -100,14 +107,9 @@ const APPROACHES: {
     title: 'Day-by-day',
     summary:
       'Log each trading day. Your largest day, cumulative profit, and trading days are worked out for you.',
-    provides: [
+    provides: ({ balance }) => [
+      ...(balance ? ['Current balance'] : []),
       'Each day’s profit, positive or negative',
-      <>
-        Current balance,{' '}
-        <strong className="font-semibold">
-          only if you’ve already taken a payout
-        </strong>
-      </>,
     ],
   },
 ]
@@ -183,7 +185,7 @@ function stepCopy(step: StepId, draft: SetupDraft) {
     case 'payout':
       return {
         title: 'Have you taken a payout from this account yet?',
-        lead: 'If you have, you’ll enter your current balance next. If not, it’s worked out from the days you log.',
+        lead: 'If you have, you’ll give your current balance. If not, it’s where the account started plus the profit you have made since.',
       }
     case 'balance':
       return {
@@ -466,7 +468,9 @@ export function Walkthrough({
       onFinish({
         ...draft,
         approach: draft.approach,
-        payoutTaken: draft.approach === 'dayByDay' && draft.payoutTaken === true,
+        // Either approach needs it now: it decides whether the balance was
+        // asked for or worked out.
+        payoutTaken: hasTakenPayout(draft),
         strategy: draft.strategy ?? 'conservative',
       })
       return
@@ -478,6 +482,13 @@ export function Walkthrough({
     setError(null)
     setIndex((i) => Math.max(0, i - 1))
   }
+
+  // Asked before this screen, as a count or as a yes or no, so by here it is
+  // always settled: a balance is only given once a payout has been taken.
+  const asksBalance = hasTakenPayout(draft)
+  const asksDays = stepsFor({ ...draft, approach: 'pointInTime' }).includes(
+    'tradingDays',
+  )
 
   const isField =
     step === 'balance' ||
@@ -628,21 +639,26 @@ export function Walkthrough({
               >
                 <span className="text-sm text-muted-foreground">{a.summary}</span>
                 <span className="text-sm font-medium">You’ll provide</span>
-                <Bullets items={a.provides} />
+                <Bullets
+                  items={a.provides({ balance: asksBalance, days: asksDays })}
+                />
               </ChoiceCard>
             ))}
           </RadioGroup>
-          {/* Guidance, not an error: "note" keeps screen readers from
+          {/* Only where a payout is actually behind them, and guidance
+              rather than an error: "note" keeps screen readers from
               announcing it as urgent on page load. */}
-          <Alert role="note" className="mt-6">
-            <Info />
-            <AlertTitle>Already taken a payout?</AlertTitle>
-            <AlertDescription>
-              Only include values from after your last payout: your largest
-              profit day, cumulative profit, and each day you log. Enter your
-              balance as it stands today.
-            </AlertDescription>
-          </Alert>
+          {asksBalance && (
+            <Alert role="note" className="mt-6">
+              <Info />
+              <AlertTitle>Since you’ve already taken a payout</AlertTitle>
+              <AlertDescription>
+                Only include values from after your last payout: your largest
+                profit day, cumulative profit, and each day you log. Enter your
+                balance as it stands today.
+              </AlertDescription>
+            </Alert>
+          )}
         </>
       )
       break

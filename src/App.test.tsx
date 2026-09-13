@@ -122,6 +122,12 @@ function press(buttonText: string) {
   act(() => button.click())
 }
 
+/** The text of one choice card, since the cards repeat each other's words. */
+function card(value: string): string {
+  const radio = container.querySelector(`button[role="radio"][value="${value}"]`)
+  return radio?.closest('label')?.textContent ?? ''
+}
+
 function choose(value: string) {
   const radio = container.querySelector<HTMLButtonElement>(
     `button[role="radio"][value="${value}"]`,
@@ -130,8 +136,11 @@ function choose(value: string) {
   act(() => radio.click())
 }
 
-/** Past the account screens, on the workbook's account by default. */
-function toApproach(templateId = 'mffu-50k-builder') {
+/**
+ * Past the account screens, on the workbook's account by default, and with a
+ * payout behind you so the balance is asked for rather than worked out.
+ */
+function toApproach(templateId = 'mffu-50k-builder', payouts = 1) {
   const template = accountTemplate(templateId)
   choose(firmOf(template).id)
   press('Continue')
@@ -142,8 +151,14 @@ function toApproach(templateId = 'mffu-50k-builder') {
     choose(templateId)
     press('Continue')
   }
-  // Only accounts with a graduated or dated schedule are asked about it.
-  if (hasSchedule(template)) press('Continue')
+  // Where the payouts are counted, the count answers it; where they are not,
+  // it is a yes or a no.
+  if (hasSchedule(template)) {
+    if (payouts > 0) type(byLabel('Payouts taken so far'), String(payouts))
+  } else {
+    choose(payouts > 0 ? 'yes' : 'no')
+  }
+  press('Continue')
 }
 
 /** Walk the point-in-time screens up to the strategy question. */
@@ -162,8 +177,11 @@ function pointInTimeTo(
   press('Continue')
   type(byLabel('Cumulative profit'), cumulative)
   press('Continue')
-  type(byLabel('Trading days so far'), tradingDays)
-  press('Continue')
+  // Asked only where the firm's minimum tops what consistency already takes.
+  if (container.querySelector('#walkthrough-trading-days')) {
+    type(byLabel('Trading days so far'), tradingDays)
+    press('Continue')
+  }
 }
 
 describe('walkthrough', () => {
@@ -262,8 +280,8 @@ describe('walkthrough', () => {
     choose('mffu-25k-builder')
     press('Continue')
 
-    // Flat caps and one schedule, so no payout schedule screen.
-    expect(headline()).toBe('How do you want to track this payout?')
+    // Flat caps and one schedule, so a yes or no rather than a count.
+    expect(headline()).toBe('Have you taken a payout from this account yet?')
     expect(header()).toContain('MyFundedFutures 25k Builder')
   })
 
@@ -276,18 +294,33 @@ describe('walkthrough', () => {
     expect(text()).toContain('Cumulative profit, which resets after each payout')
     expect(text()).toContain('Day-by-day')
     expect(text()).toContain('Each day’s profit, positive or negative')
-    expect(text()).toContain('only if you’ve already taken a payout')
 
     const bold = Array.from(container.querySelectorAll('strong')).map(
       (el) => el.textContent,
     )
-    expect(bold).toEqual([
-      'which resets after each payout',
-      'only if you’ve already taken a payout',
-    ])
+    // The day-by-day card no longer hedges: it lists a balance only where one
+    // will actually be asked for.
+    expect(bold).toEqual(['which resets after each payout'])
 
-    expect(text()).toContain('Already taken a payout?')
+    // A payout is behind this trader, so the note about what to include
+    // applies, and the balance is one of the numbers to give.
+    expect(text()).toContain('Since you’ve already taken a payout')
     expect(text()).toContain('Only include values from after your last payout')
+    expect(card('pointInTime')).toContain('Current balance')
+
+    // A Builder wants two trading days, which a 50% consistency rule takes
+    // anyway, so there is nothing to ask for.
+    expect(card('pointInTime')).not.toContain('Trading days so far')
+  })
+
+  it('keeps the payout note for traders who have not taken one', () => {
+    render()
+    toApproach('mffu-50k-builder', 0)
+
+    // Nothing to reset from, so there is nothing to warn about.
+    expect(headline()).toBe('How do you want to track this payout?')
+    expect(text()).not.toContain('Since you’ve already taken a payout')
+    expect(text()).not.toContain('Only include values from after your last payout')
   })
 
   it('asks for a choice before moving on', () => {
@@ -425,8 +458,6 @@ describe('walkthrough', () => {
     toApproach()
     choose('dayByDay')
     press('Continue')
-    choose('yes')
-    press('Continue')
     type(byLabel('Current balance'), '4758.34')
     press('Continue')
 
@@ -444,10 +475,8 @@ describe('walkthrough', () => {
 
   it('day-by-day before any payout works the balance out from logged days', () => {
     render()
-    toApproach()
+    toApproach('mffu-50k-builder', 0)
     choose('dayByDay')
-    press('Continue')
-    choose('no')
     press('Continue')
 
     // No balance screen on this path.
@@ -461,7 +490,7 @@ describe('walkthrough', () => {
 
     // Balance = $0 start + $6.60: target 4100 - 6.6 = 4093.40 over 2 days.
     expect(headline()).toBe('Two more trading days at $2,043.40 each')
-    expect(text()).toContain('Starting balance plus your logged days.')
+    expect(text()).toContain('Starting balance plus your logged days')
   })
 
   it('moves to the firm’s theme the moment it is picked', () => {
@@ -590,8 +619,7 @@ describe('walkthrough', () => {
     press('Continue')
     choose('pointInTime')
     press('Continue')
-    type(byLabel('Current balance'), '52000')
-    press('Continue')
+    // None taken, so the balance follows from the profit rather than a field.
     type(byLabel('Largest profit day'), '400')
     press('Continue')
     type(byLabel('Cumulative profit'), '900')
@@ -616,6 +644,71 @@ describe('walkthrough', () => {
 
     // 25k Growth pays a flat $1,000 and has no before-cutoff table.
     expect(headline()).toBe('How do you want to track this payout?')
+  })
+
+  it('asks about payouts once, not twice, where a schedule counts them', () => {
+    render()
+    toApproach('tradeify-50k-growth', 0)
+
+    // No payouts taken, so neither card lists a balance: it follows from the
+    // starting balance plus the profit since, whichever way that is given.
+    expect(card('dayByDay')).toContain('Each day’s profit, positive or negative')
+    expect(card('dayByDay')).not.toContain('Current balance')
+    expect(card('pointInTime')).toContain('Cumulative profit')
+    expect(card('pointInTime')).not.toContain('Current balance')
+    // A Growth minimum of five days tops the three that 35% takes, so it is
+    // still worth asking about.
+    expect(card('pointInTime')).toContain('Trading days so far')
+
+    choose('dayByDay')
+    press('Continue')
+
+    // The schedule screen already asked how many payouts are behind you, so
+    // the yes-or-no screen is gone and the balance comes from the days.
+    expect(headline()).toBe('Log each trading day')
+    expect(text()).not.toContain('Have you taken a payout')
+  })
+
+  it('works a point-in-time balance out of the profit before any payout', () => {
+    render()
+    toApproach('mffu-50k-builder', 0)
+    choose('pointInTime')
+    press('Continue')
+
+    // A Builder starts at zero, so the balance is the cumulative profit and
+    // asking for both would be asking twice.
+    expect(headline()).toBe('What’s your largest profit day?')
+    type(byLabel('Largest profit day'), '359')
+    press('Continue')
+    type(byLabel('Cumulative profit'), '800')
+    press('Continue')
+    choose('conservative')
+    press('Show my plan')
+
+    expect(text()).toContain('Starting balance plus your cumulative profit')
+    expect(text()).toContain('+$800.00')
+  })
+
+  it('asks for a balance once the payout count says one was taken', () => {
+    render()
+    choose('tradeify')
+    press('Continue')
+    choose('tradeify-growth')
+    press('Continue')
+    choose('tradeify-50k-growth')
+    press('Continue')
+    type(byLabel('Payouts taken so far'), '2')
+    press('Continue')
+
+    // Two payouts in, so the balance is back on the card.
+    expect(card('dayByDay')).toContain('Current balance')
+
+    choose('dayByDay')
+    press('Continue')
+
+    // Two payouts in, the logged days no longer add up to the balance.
+    expect(headline()).toBe('What’s your current balance?')
+    expect(text()).not.toContain('Have you taken a payout')
   })
 
   it('skips the walkthrough for data saved before it existed', () => {
@@ -705,9 +798,10 @@ describe('day-by-day dashboard', () => {
     addDay('2026-09-08', '400')
     addDay('2026-09-09', '400')
 
-    // Two trading days is also the firm's minimum, so nothing is left.
+    // Two trading days is what 50% consistency takes anyway, so nothing is
+    // left to wait for and the count is not reported.
     expect(headline()).toBe('Payout ready')
-    expect(text()).toContain('2 of 2')
+    expect(text()).not.toContain('2 of 2')
     expect(text()).not.toContain('NaN')
     expect(text()).not.toContain('Infinity')
   })
@@ -796,7 +890,7 @@ describe('day-by-day dashboard', () => {
     const toggle = container.querySelector<HTMLButtonElement>('#payout-taken')!
     act(() => toggle.click())
 
-    expect(text()).toContain('Starting balance plus your logged days.')
+    expect(text()).toContain('Starting balance plus your logged days')
     expect(container.querySelector('#account-balance')).toBeNull()
   })
 
@@ -907,7 +1001,7 @@ describe('point-in-time dashboard', () => {
       'mpc.setup': {
         templateId: 'mffu-50k-builder',
         approach: 'pointInTime',
-        payoutTaken: false,
+        payoutTaken: true,
         strategy: 'conservative',
       },
       'mpc.rules': WORKBOOK_RULES,
@@ -929,7 +1023,6 @@ describe('point-in-time dashboard', () => {
     expect(byLabel('Current balance').disabled).toBe(true)
     expect(byLabel('Largest profit day').disabled).toBe(false)
     expect(byLabel('Cumulative profit').disabled).toBe(false)
-    expect(byLabel('Trading days so far').disabled).toBe(false)
 
     type(byLabel('Cumulative profit'), '800')
 
@@ -938,12 +1031,31 @@ describe('point-in-time dashboard', () => {
   })
 
   it('holds the plan open until the minimum trading days are met', () => {
-    seedPointInTime('359', '800', '0')
+    // The workbook's own two days are what 50% consistency takes anyway, so
+    // this raises the rule to one that can actually bind.
+    seedPointInTime('359', '800', '3')
+    seed({ 'mpc.rules': { ...WORKBOOK_RULES, minTradingDays: '9' } })
     render()
 
-    // The profit is there, so the plan exists only to cover the two days.
-    expect(headline()).toBe('Two more trading days to qualify')
-    expect(text()).toContain('0 of 2')
+    // The profit is there, so the plan exists only to cover the days.
+    expect(headline()).toBe('Six more trading days to qualify')
+    expect(text()).toContain('3 of 9')
+    // No profit bar on this account, so those days can make anything.
+    expect(text()).toContain('whatever those days make')
+  })
+
+  it('says nothing about trading days a consistency rule already takes', () => {
+    seedPointInTime('359', '6.6', '')
+    render()
+
+    // Two days at 50%: covered by definition, so neither asked nor reported.
+    expect(headline()).toBe('Two more trading days at $355.70 each')
+    expect(container.querySelector('#snapshot-days')).toBeNull()
+    // The breakdown drops its row; the rule itself stays editable above it.
+    const breakdown = container.querySelector('dl')?.textContent ?? ''
+    expect(breakdown).toContain('Daily cap')
+    expect(breakdown).not.toContain('Trading days')
+    expect(byLabel('Minimum trading days').value).toBe('2')
   })
 
   it('switches between conservative and aggressive plans', () => {
@@ -987,7 +1099,7 @@ describe('point-in-time dashboard', () => {
       'mpc.setup': {
         templateId: 'tradeify-50k-growth',
         approach: 'pointInTime',
-        payoutTaken: false,
+        payoutsSoFar: 1,
         strategy: 'conservative',
       },
       'mpc.rules': {
@@ -1015,12 +1127,4 @@ describe('point-in-time dashboard', () => {
     expect(text()).toContain('2 of 5')
   })
 
-  it('says only qualify where the firm counts every day traded', () => {
-    seedPointInTime('359', '800', '0')
-    render()
-
-    // The workbook's account has no profit bar, so there is none to name.
-    expect(headline()).toBe('Two more trading days to qualify')
-    expect(text()).toContain('whatever those days make')
-  })
 })

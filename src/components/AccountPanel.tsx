@@ -72,7 +72,8 @@ const RULES: { key: RuleKey; label: string; unit: FieldUnit; hint: string }[] = 
 
 export type BalanceDisplay =
   | { kind: 'input' }
-  | { kind: 'derived'; value: number }
+  /** Worked out rather than typed: `from` says out of what. */
+  | { kind: 'derived'; value: number; from: string }
 
 interface AccountPanelProps {
   templateId: string
@@ -214,7 +215,8 @@ export function AccountPanel({
             <div className="text-sm">
               <p className="font-medium">Current balance</p>
               <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
-                Starting balance plus your logged days.
+                Starting balance plus {balance.from}, with no payout taken out
+                of it yet.
               </p>
             </div>
             <p className="font-figure text-lg font-semibold whitespace-nowrap">

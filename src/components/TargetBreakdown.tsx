@@ -1,4 +1,5 @@
 import type { CalcInputs, CalcResults, Plan } from '@/lib/calc'
+import { tradingDaysBind } from '@/lib/setup'
 import {
   formatCurrency,
   formatPercent,
@@ -84,7 +85,9 @@ export function TargetBreakdown({
     })
   }
 
-  if (inputs.minTradingDays > 0) {
+  // Nothing to report where the firm's minimum is one the consistency rule
+  // reaches on its own.
+  if (tradingDaysBind(inputs.minTradingDays, inputs.consistencyRequirement)) {
     rows.push({
       label: 'Trading days',
       value: `${Math.min(inputs.tradingDaysSoFar, inputs.minTradingDays)} of ${inputs.minTradingDays}`,

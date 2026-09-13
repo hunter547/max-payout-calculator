@@ -40,28 +40,31 @@ both ask.
 A firm with no minimum trading days skips that question later on, the way a
 single-size type skips its own.
 
-Accounts whose payouts are graduated, or whose terms changed on a date, then
-get one more screen: **where are you in your payout schedule?** It asks how many
-payouts you have taken, the buffer you want a payout to leave behind, and where
-it matters, whether you bought the account before the firm's cutoff — see
-[Payout schedules](#payout-schedules). Accounts
-without either (MyFundedFutures Builder, Tradeify 25k Growth) never see it.
+Every account then says where it is in its payouts, in one of two ways:
 
-**Point-in-time.** Copy four numbers from your account, one per screen:
+- Accounts whose payouts are graduated, or whose terms changed on a date, get
+  **where are you in your payout schedule?** — how many payouts you have taken,
+  the buffer you want one to leave behind, and where it matters, which side of
+  the firm's cutoff you bought on. See [Payout schedules](#payout-schedules).
+- The rest get **have you taken a payout from this account yet?**
 
-1. Current balance
+It is asked before the approach question, so both cards on that screen can say
+exactly what they will need.
+
+**Point-in-time.** Copy a few numbers from your account, one per screen:
+
+1. Current balance, *only* once a payout has been taken (see
+   [The balance](#about-the-balance))
 2. Largest profit day
 3. Cumulative profit since the last payout (it resets after each payout)
-4. Trading days since the last payout
+4. Trading days since the last payout, where the firm's minimum can bind (see
+   [Days a consistency rule already takes](#days-a-consistency-rule-already-takes))
 
 **Day-by-day.** Log each trading day instead:
 
-1. Have you taken a payout from this account yet?
-2. If yes: your current balance. If not, this screen is skipped and the balance
-   is worked out from your logged days.
-3. Each day's profit or loss, positive or negative. You can add more later.
-   The number of days you log is also your trading days for the firm's
-   minimum.
+1. Current balance, on the same condition as above.
+2. Each day's profit or loss, positive or negative. You can add more later.
+   The days you log are also your trading days for the firm's minimum.
 
 Both paths end on one last question: **Conservative, Aggressive, or Curated?**
 Each card previews the plan it would give you for the numbers you just entered.
@@ -81,16 +84,24 @@ there; a Tradeify account starts at its size, so a 50k Growth account starts at
 $50,000 and pays a max payout at $53,000. Either way the app compares the
 balance against the template's balance for a max payout.
 
-Before any payout, the balance isn't asked for: it's the starting balance plus
-every day logged since the account was funded, which is how day-by-day works it
-out.
+**Before the first payout the balance is not asked for at all**, in either
+approach: it is the starting balance plus the profit since, which the trader
+has already given — as logged days in one approach and as cumulative profit in
+the other. On an account that starts at $0, like a Builder, the balance and the
+cumulative profit are the same number, so asking for both would be asking twice
+and inviting two answers that disagree.
+
+Once a payout has been taken the two part company — a payout takes money out of
+the balance while the profit count resets to zero — so from then on both are
+asked for, and the balance is typed rather than worked out.
 
 ## The dashboard
 
 - **Headline and chart:** how many more days at how much each, plotted against
   the daily cap. Logged days are solid columns; planned days are outlined.
 - **Day-by-day:** a ledger of each day's P&L, edited inline. An "I've taken a
-  payout" switch chooses between an entered and a derived balance.
+  payout" switch chooses between an entered and a derived balance, on accounts
+  whose payouts are not already counted by a schedule.
 - **Point-in-time:** "Your numbers" holds your largest profit day, cumulative
   profit, and trading days so far.
 - **Account:** the account picker, the payout schedule (how many payouts you
@@ -291,6 +302,25 @@ pay one. The app subtracts the days you have from the firm's minimum and never
 plans fewer days than are left, so a plan can run longer than the profit alone
 would need. When the profit target is already met but days are missing, the
 headline says so ("Three more trading days to qualify").
+
+### Days a consistency rule already takes
+
+A firm's minimum trading days is not always worth asking about. At payout time
+no single day may top `consistency` of the net profit, and the net is at most
+the day count times the largest day, so **the count is already at least
+1 / consistency**:
+
+| Account | Consistency | Days it forces | Firm asks | Binds? |
+|---------|-------------|----------------|-----------|--------|
+| MyFundedFutures Builder | 50% | 2 | 2 | no |
+| Tradeify Growth | 35% | 3 | 5 | yes |
+| Tradeify Lightning | 20–30% | 4–5 | none | no |
+
+So a Builder's two days arrive on their own, and `tradingDaysBind` returns
+false: the question is dropped from the walkthrough, the field from the
+dashboard, and the row from the breakdown, and the minimum counts as met. Edit
+the rule to something that can bind — nine days at 50%, say — and all three
+come back.
 
 ### Which days count
 

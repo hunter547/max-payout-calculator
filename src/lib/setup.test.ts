@@ -7,14 +7,42 @@ import {
   sizesFor,
 } from './accounts'
 import { summarize } from './ledger'
-import { balanceHint, deriveInputs, legacySetup, stepsFor, toCuratedChoice } from './setup'
+import {
+  balanceHint,
+  deriveInputs,
+  hasTakenPayout,
+  impliedTradingDays,
+  tradingDaysBind,
+  legacySetup,
+  stepsFor,
+  toCuratedChoice,
+} from './setup'
 
 const BUILDER = accountFor(accountTemplate('mffu-50k-builder'))
 const GROWTH_25K = accountFor(accountTemplate('tradeify-25k-growth'))
 
 describe('stepsFor', () => {
-  it('starts with the firm, type and size, then asks point-in-time users for four numbers', () => {
-    expect(stepsFor({ approach: 'pointInTime', payoutTaken: null, programId: 'tradeify-growth', templateId: 'tradeify-50k-growth' })).toEqual([
+  it('starts with the firm, type and size, then asks point-in-time users for its numbers', () => {
+    const growth = {
+      approach: 'pointInTime' as const,
+      payoutTaken: null,
+      programId: 'tradeify-growth',
+      templateId: 'tradeify-50k-growth',
+    }
+    // Nothing withdrawn yet, so the balance follows from the profit.
+    expect(stepsFor({ ...growth, payoutsSoFar: '0' })).toEqual([
+      'firm',
+      'program',
+      'size',
+      'payouts',
+      'approach',
+      'largest',
+      'cumulative',
+      'tradingDays',
+      'strategy',
+    ])
+    // Once a payout is behind you, it does not.
+    expect(stepsFor({ ...growth, payoutsSoFar: '1' })).toEqual([
       'firm',
       'program',
       'size',
@@ -28,34 +56,85 @@ describe('stepsFor', () => {
     ])
   })
 
+  it('asks a scheduled account for its payout count instead of a yes or no', () => {
+    const growth = {
+      approach: 'dayByDay' as const,
+      payoutTaken: null,
+      programId: 'tradeify-growth',
+      templateId: 'tradeify-50k-growth',
+    }
+    // The schedule screen already asked how many payouts are behind you.
+    const fresh = stepsFor({ ...growth, payoutsSoFar: '0' })
+    expect(fresh).toContain('payouts')
+    expect(fresh).not.toContain('payout')
+    expect(fresh).not.toContain('balance')
+    // And it is asked before the approach, so both cards know the answer.
+    expect(fresh.indexOf('payouts')).toBeLessThan(fresh.indexOf('approach'))
+
+    // A count above zero says a payout has been taken, so the balance can no
+    // longer be worked out from the logged days.
+    const after = stepsFor({ ...growth, payoutsSoFar: '2' })
+    expect(after).not.toContain('payout')
+    expect(after).toContain('balance')
+
+    // An account with no schedule still gets the yes-or-no screen.
+    const builder = stepsFor({
+      approach: 'dayByDay',
+      payoutTaken: true,
+      payoutsSoFar: '0',
+      programId: 'mffu-builder',
+      templateId: 'mffu-50k-builder',
+    })
+    expect(builder).toContain('payout')
+    expect(builder).not.toContain('payouts')
+  })
+
   it('asks day-by-day users for a balance only after a payout', () => {
-    expect(stepsFor({ approach: 'dayByDay', payoutTaken: true, programId: 'tradeify-growth', templateId: 'tradeify-50k-growth' })).toEqual([
+    const builder = {
+      approach: 'dayByDay' as const,
+      payoutsSoFar: '0',
+      programId: 'mffu-builder',
+      templateId: 'mffu-50k-builder',
+    }
+    expect(stepsFor({ ...builder, payoutTaken: true })).toEqual([
       'firm',
       'program',
       'size',
-      'payouts',
-      'approach',
       'payout',
+      'approach',
       'balance',
       'days',
       'strategy',
     ])
-    expect(stepsFor({ approach: 'dayByDay', payoutTaken: false, programId: 'tradeify-growth', templateId: 'tradeify-50k-growth' })).toEqual([
+    expect(stepsFor({ ...builder, payoutTaken: false })).toEqual([
       'firm',
       'program',
       'size',
-      'payouts',
-      'approach',
       'payout',
+      'approach',
       'days',
       'strategy',
     ])
+  })
+
+  it('drops the trading-days screen where the minimum cannot bind', () => {
+    // A Builder wants two days, which 50% consistency takes anyway.
+    expect(
+      stepsFor({
+        approach: 'pointInTime',
+        payoutTaken: null,
+        payoutsSoFar: '0',
+        programId: 'mffu-builder',
+        templateId: 'mffu-50k-builder',
+      }),
+    ).not.toContain('tradingDays')
   })
 
   it('drops the trading-days screen where a firm sets no minimum', () => {
     const steps = stepsFor({
       approach: 'pointInTime',
       payoutTaken: null,
+      payoutsSoFar: '0',
       programId: 'tradeify-lightning',
       templateId: 'tradeify-50k-lightning',
     })
@@ -67,6 +146,7 @@ describe('stepsFor', () => {
       stepsFor({
         approach: 'pointInTime',
         payoutTaken: null,
+        payoutsSoFar: '0',
         programId: 'tradeify-growth',
         templateId: 'tradeify-50k-growth',
       }),
@@ -79,6 +159,7 @@ describe('stepsFor', () => {
       const steps = stepsFor({
         approach: 'pointInTime',
         payoutTaken: null,
+        payoutsSoFar: '0',
         programId: program.id,
         templateId: sizes[0].id,
       })
@@ -91,28 +172,90 @@ describe('stepsFor', () => {
     const steps = stepsFor({
       approach: 'pointInTime',
       payoutTaken: null,
+      payoutsSoFar: '0',
       programId: 'single-size-type',
       templateId: 'mffu-50k-builder',
     })
-    expect(steps.slice(0, 3)).toEqual(['firm', 'program', 'approach'])
+    expect(steps.slice(0, 3)).toEqual(['firm', 'program', 'payout'])
     expect(steps).not.toContain('size')
   })
 
   it('keeps the size screen until a type is picked', () => {
     expect(
-      stepsFor({ approach: null, payoutTaken: null, programId: '', templateId: '' }),
+      stepsFor({ approach: null, payoutTaken: null, payoutsSoFar: '0', programId: '', templateId: '' }),
     ).toContain('size')
   })
 
   it('asks about the payout schedule only where there is one', () => {
     const steps = (templateId: string, programId: string) =>
-      stepsFor({ approach: 'pointInTime', payoutTaken: null, programId, templateId })
+      stepsFor({
+        approach: 'pointInTime',
+        payoutTaken: null,
+        payoutsSoFar: '0',
+        programId,
+        templateId,
+      })
 
     // Graduated caps, and terms that changed on a date.
     expect(steps('tradeify-50k-growth', 'tradeify-growth')).toContain('payouts')
     // One flat cap, one schedule: nothing to ask.
     expect(steps('mffu-50k-builder', 'mffu-builder')).not.toContain('payouts')
     expect(steps('tradeify-25k-growth', 'tradeify-growth')).not.toContain('payouts')
+  })
+})
+
+describe('tradingDaysBind', () => {
+  it('counts the days a consistency rule takes on its own', () => {
+    // No day may top G of the net, so the net takes at least 1 / G days.
+    expect(impliedTradingDays(0.5)).toBe(2)
+    expect(impliedTradingDays(0.35)).toBe(3)
+    expect(impliedTradingDays(0.2)).toBe(5)
+    expect(impliedTradingDays(0)).toBe(0)
+  })
+
+  it('binds only where a firm asks for more days than that', () => {
+    // A Builder wants two days at 50%, which two days of trading give you.
+    expect(tradingDaysBind(2, 0.5)).toBe(false)
+    // A Growth wants five at 35%, which takes three.
+    expect(tradingDaysBind(5, 0.35)).toBe(true)
+    // Lightning sets none at all.
+    expect(tradingDaysBind(0, 0.2)).toBe(false)
+    // An edited rule can make it bind again.
+    expect(tradingDaysBind(9, 0.5)).toBe(true)
+  })
+
+  it('takes the minimum as met where it cannot bind', () => {
+    const source = {
+      approach: 'pointInTime' as const,
+      payoutTaken: false,
+      balance: '4758.34',
+      largestProfitDay: '359',
+      netProfit: '6.6',
+      tradingDays: '',
+    }
+    // Nothing typed, and nothing missing: the rule is covered by definition.
+    expect(deriveInputs(source, summarize([]), BUILDER).tradingDaysSoFar).toBe(2)
+    // Where it binds, what the trader typed is what counts.
+    expect(
+      deriveInputs({ ...source, tradingDays: '2' }, summarize([]), GROWTH_25K)
+        .tradingDaysSoFar,
+    ).toBe(2)
+  })
+})
+
+describe('hasTakenPayout', () => {
+  it('reads the payout count where there is one, the answer where there is not', () => {
+    const growth = { templateId: 'tradeify-50k-growth', payoutTaken: null }
+    expect(hasTakenPayout({ ...growth, payoutsSoFar: '0' })).toBe(false)
+    expect(hasTakenPayout({ ...growth, payoutsSoFar: '1' })).toBe(true)
+    // Even a yes is overruled by a count of none: they cannot both be true.
+    expect(
+      hasTakenPayout({ ...growth, payoutTaken: true, payoutsSoFar: '0' }),
+    ).toBe(false)
+
+    const builder = { templateId: 'mffu-50k-builder', payoutsSoFar: '3' }
+    expect(hasTakenPayout({ ...builder, payoutTaken: true })).toBe(true)
+    expect(hasTakenPayout({ ...builder, payoutTaken: false })).toBe(false)
   })
 })
 
@@ -134,7 +277,7 @@ describe('deriveInputs', () => {
     const inputs = deriveInputs(
       {
         approach: 'pointInTime',
-        payoutTaken: false,
+        payoutTaken: true,
         balance: '4758.34',
         largestProfitDay: '359',
         netProfit: '6.6',
@@ -151,7 +294,9 @@ describe('deriveInputs', () => {
       currentNetProfit: 6.6,
       consistencyRequirement: 0.5,
       minTradingDays: 2,
-      tradingDaysSoFar: 3,
+      // Two days at 50% is what the consistency rule takes anyway, so the
+      // count is never asked for and never short.
+      tradingDaysSoFar: 2,
       qualifyingDayProfit: 0,
       profitGoal: 0,
     })
@@ -173,6 +318,22 @@ describe('deriveInputs', () => {
       currentNetProfit: 6.6,
       tradingDaysSoFar: 3,
     })
+  })
+
+  it('works a point-in-time balance out of the profit before any payout', () => {
+    const source = {
+      approach: 'pointInTime' as const,
+      payoutTaken: false,
+      // Typed earlier, then made irrelevant by answering "no payout yet".
+      balance: '99999',
+      largestProfitDay: '359',
+      netProfit: '6.6',
+      tradingDays: '3',
+    }
+    // A Builder starts at zero, so its balance is the profit itself.
+    expect(deriveInputs(source, summarize([]), BUILDER).balance).toBe(6.6)
+    // A Growth starts at the account size.
+    expect(deriveInputs(source, summarize([]), GROWTH_25K).balance).toBe(25006.6)
   })
 
   it('adds the logged days to where the account started, before any payout', () => {

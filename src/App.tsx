@@ -62,6 +62,7 @@ import {
   legacySetup,
   resolvePlan,
   toCuratedChoice,
+  tradingDaysBind,
   type CuratedDraft,
   type Setup,
   type SetupDraft,
@@ -287,10 +288,17 @@ export default function App() {
   const payoutBuffer = setup?.payoutBuffer ?? defaultBuffer(template)
   const schedule = scheduleFor(template, era)
   const approach = setup?.approach ?? 'dayByDay'
-  const payoutTaken = setup?.payoutTaken === true
+  // The payout count answers this where there is a schedule to count through,
+  // so the switch below only appears where there is not.
+  const countsPayouts = hasSchedule(template)
+  const payoutTaken = countsPayouts
+    ? payoutsSoFar > 0
+    : setup?.payoutTaken === true
   const strategy: Strategy = setup?.strategy ?? 'conservative'
   const curated = setup?.curated ?? CURATED_DEFAULT
-  const balanceEntered = approach === 'pointInTime' || payoutTaken
+  // The balance is only typed once a payout has been taken; before that it
+  // follows from where the account started plus the profit since.
+  const balanceEntered = payoutTaken
 
   const sorted = useMemo(() => sortByDate(days), [days])
   // Which logged days count is the firm's call, so the ledger is summarised
@@ -430,11 +438,11 @@ export default function App() {
     })
     setRules({
       ...accountFor(next, result.era, taken, room),
-      // A balance only gets typed when the trader has one to give.
-      balance:
-        result.approach === 'pointInTime' || result.payoutTaken
-          ? result.balance
-          : String(next.startingBalance),
+      // A balance only gets typed once a payout has been taken; before that
+      // it follows from the starting balance plus the profit since.
+      balance: result.payoutTaken
+        ? result.balance
+        : String(next.startingBalance),
     })
     appearance.setBrand(firmOf(next).themeId)
     if (result.approach === 'pointInTime') {
@@ -523,7 +531,11 @@ export default function App() {
 
   const balanceDisplay: BalanceDisplay = balanceEntered
     ? { kind: 'input' }
-    : { kind: 'derived', value: inputs.balance }
+    : {
+        kind: 'derived',
+        value: inputs.balance,
+        from: approach === 'dayByDay' ? 'your logged days' : 'your cumulative profit',
+      }
 
   /** A sensible first curated plan: the conservative day count, in range. */
   function startingCurated(): CuratedDraft {
@@ -649,6 +661,10 @@ export default function App() {
               <SnapshotPanel
                 snapshot={snapshot}
                 qualifyingDayProfit={qualifyingDayProfit}
+                asksTradingDays={tradingDaysBind(
+                  inputs.minTradingDays,
+                  inputs.consistencyRequirement,
+                )}
                 onSnapshotChange={(patch) =>
                   setSnapshot((prev) => ({ ...prev, ...patch }))
                 }
@@ -692,7 +708,7 @@ export default function App() {
                 consistencyInvalid={consistencyInvalid}
                 balance={balanceDisplay}
                 payoutTaken={
-                  approach === 'dayByDay'
+                  !countsPayouts
                     ? {
                         checked: balanceEntered,
                         onChange: (checked) =>
