@@ -64,6 +64,17 @@ Two things trip people here:
   unreadable as a filled bar or a focus ring. Keep the validated chart trio
   (`--profit #2daa80`, `--loss #d2463c`, `--plan #4f7bf0`) and give the brand
   color `--primary`; let the firm's second color take `--cap`.
+- **Check the trio on the new theme's own plate**, with the `dataviz` skill's
+  palette checker — the trio is validated, the surface under it is not:
+
+  ```bash
+  node validate_palette.js "#2daa80,#d2463c,#4f7bf0"     --mode dark --surface "#0b1138" --pairs all
+  ```
+
+  A firm's second colour will usually fail the lightness band (Apex's gold sits
+  at L 0.81, above the dark band's 0.67). That is expected and fine *as a
+  labelled line* — every firm theme uses it for the cap line only, never for a
+  filled bar. Write the result into the theme's CSS comment.
 - **Write the reasoning into the CSS comment.** Every existing theme block
   explains which brand color went where and why, and the next person will trust
   it over re-deriving it.

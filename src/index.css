@@ -346,6 +346,10 @@
   Cobalt is the brand and takes --primary, but it is nearly as dark as the page
   (2.4:1), so it cannot carry a filled bar or a focus ring: planned days take
   the validated blue, rings take their sky, and the cap takes their gold.
+  The chart trio passes the dataviz checker on this theme's own plate (#0B1138,
+  dark): lightness band, chroma floor, CVD separation and 3:1 contrast. Gold
+  sits above the band at L 0.81, so like every other firm theme it marks only
+  the labelled cap line, never a filled bar.
 */
 :root[data-brand='apex'] {
   color-scheme: dark;
