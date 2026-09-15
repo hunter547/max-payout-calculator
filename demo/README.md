@@ -8,8 +8,8 @@ or caption them yourself.
 |------|------|----------------|
 | `01-the-plan` | 1600×900 | The answer: days left and the daily number, on an Apex 100k EOD |
 | `02-payout-ready` | 1600×900 | "Payout ready" on a Tradeify 50k Growth, with the button that starts the payout flow |
-| `03-five-firms` | 1600×900 | The firm picker, with every program and size each firm brings |
-| `04-on-phone` | 1080×1080 | The dashboard at phone width, MyFundedFutures |
+| `03-five-firms` | 1600×900 | The firm picker in dark mode, with every program and size each firm brings |
+| `04-on-phone` | 1080×1080 | The dashboard at phone width, in a phone, MyFundedFutures |
 | `05-by-payout-number` | 1600×900 | The schedule step: cap, consistency and balance for *this* payout |
 | `06-several-accounts` | 1600×900 | The switcher, three accounts across three firms |
 | `07-log-the-day` | 1600×900 | The ledger and the editable rules beside it, Lucid Trading |
@@ -17,6 +17,10 @@ or caption them yourself.
 | `09-take-it` | 1080×1080 | The payout flow, after taking one |
 
 Square cards suit feeds; the 1600×900 ones suit link previews and posts.
+
+Two things the framing does on purpose: the app window is fitted to the frame's
+width, never bled off the side, so its own header is never sliced mid-word; and
+the phone shot sits in a drawn phone rather than floating as a tall rectangle.
 
 **Every figure on them is real.** Each screen is driven through the actual
 walkthrough in a browser — firm, program, size, logged days — so the plans,

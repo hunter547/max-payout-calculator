@@ -18,7 +18,7 @@ mkdirSync(OUT, { recursive: true })
 const browser = await chromium.launch({ channel: 'msedge' })
 const errors = []
 
-async function session({ width = 1440, height = 960, scale = 2 } = {}) {
+async function session({ width = 1440, height = 960, scale = 2, dark = false } = {}) {
   const ctx = await browser.newContext({
     viewport: { width, height },
     deviceScaleFactor: scale,
@@ -27,7 +27,20 @@ async function session({ width = 1440, height = 960, scale = 2 } = {}) {
   const page = await ctx.newPage()
   page.on('pageerror', (e) => errors.push(String(e)))
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
-  await page.addInitScript(() => localStorage.clear())
+  await page.addInitScript((wantsDark) => {
+    localStorage.clear()
+    // The app reads this before first paint, so the theme never flashes.
+    if (wantsDark) {
+      // mpc.appearance is the copy the page reads before first paint; the app
+      // itself keeps the brand and the scheme in their own keys.
+      localStorage.setItem('mpc.brand', JSON.stringify('default'))
+      localStorage.setItem('mpc.theme', JSON.stringify('dark'))
+      localStorage.setItem(
+        'mpc.appearance',
+        JSON.stringify({ brand: 'default', scheme: 'dark' }),
+      )
+    }
+  }, dark)
   await page.goto('http://localhost:4173/', { waitUntil: 'networkidle' })
   await page.waitForTimeout(500)
   // Hide the caret and any scrollbar so nothing looks like a half-finished form.
@@ -118,7 +131,7 @@ async function toPlan(page, { firm, program, size, payouts = 0, days, strategy =
 
 // ------------------------------------------------------------ 3. the firm list
 {
-  const { ctx, page } = await session({ height: 1120 })
+  const { ctx, page } = await session({ height: 1120, dark: true })
   await page.waitForTimeout(400)
   await page.screenshot({ path: `${OUT}/3-firms.png`, clip: { x: 0, y: 0, width: 1440, height: 1120 } })
   console.log('3 firms screen:', (await page.locator('h1').first().innerText()).slice(0, 40))

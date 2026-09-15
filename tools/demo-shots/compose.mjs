@@ -41,14 +41,15 @@ const CARDS = [
   },
   {
     out: '03-five-firms', size: WIDE, shot: 'out/3-firms.png', fit: 'contain',
-    bg: 'linear-gradient(160deg, #f7f9fa 0%, #e3e8ee 60%, #d7dee6 100%)',
-    fg: '#18212b', dim: '#56636f', accent: '#2f4bd8',
+    bg: 'radial-gradient(120% 120% at 20% 0%, #1b2440 0%, #0d1119 58%, #070a10 100%)',
+    fg: '#f4f6f9', dim: '#a3acba', accent: '#7f95ff',
     kicker: 'Five firms, one calculator',
     title: 'Every size, schedule and consistency rule',
     sub: 'MyFundedFutures · Tradeify · Topstep · Lucid Trading · Apex Trader Funding',
   },
   {
-    out: '04-on-phone', size: SQUARE, shot: 'out/6-phone.png', fit: 'contain', portrait: true,
+    out: '04-on-phone', size: SQUARE, shot: 'out/6-phone.png', fit: 'contain',
+    portrait: true, phone: true,
     bg: 'radial-gradient(110% 110% at 50% 0%, #16233c 0%, #02040e 65%, #01020a 100%)',
     fg: '#f5f7ff', dim: '#a8b5c9', accent: '#3a82f7',
     kicker: 'On the desk or in your pocket',
@@ -143,15 +144,44 @@ for (const c of CARDS) {
           ? 'width: 100%; flex: 1; min-height: 0;'
           : contain
             ? 'height: 82%; flex: none;'
-            : 'flex: 1; height: 78%; margin-right: -140px;'}
+            // Hug the window rather than boxing it: the frame is as tall as
+            // the shot, and only a shot taller than the card gets clipped.
+            : 'flex: 1; max-height: 84%; margin-right: 56px;'}
         border-radius: ${c.portrait ? 26 : 20}px;
         overflow: hidden;
         box-shadow: 0 40px 90px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08);
       }
+      .phone {
+        position: relative;
+        flex: none;
+        padding: 12px;
+        border-radius: 58px;
+        background: linear-gradient(160deg, #3a4150 0%, #11141b 42%, #2b313c 100%);
+        box-shadow:
+          0 50px 90px rgba(0, 0, 0, 0.55),
+          0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+      }
+      .phone img {
+        display: block;
+        width: 330px;
+        border-radius: 46px;
+        background: #000;
+      }
+      /* The camera cutout, which is what makes it read as a phone at a glance. */
+      .phone .island {
+        position: absolute;
+        top: 30px; left: 50%; transform: translateX(-50%);
+        width: 92px; height: 26px;
+        border-radius: 14px;
+        background: #05070b;
+        z-index: 1;
+      }
       .shot img {
-        display: block; width: 100%; height: 100%;
-        object-fit: ${contain ? 'contain' : 'cover'};
-        object-position: ${c.at ?? 'top center'};
+        display: block; width: 100%;
+        /* Fit the width so the app's own header stays whole; what runs past
+           the bottom is just the page continuing, which reads as intended. */
+        height: ${contain ? '100%' : 'auto'};
+        ${contain ? `object-fit: contain; object-position: ${c.at ?? 'top center'};` : ''}
       }
     </style>
     <div class="copy">
@@ -159,7 +189,9 @@ for (const c of CARDS) {
       <h1>${c.title}</h1>
       <p>${c.sub}</p>
     </div>
-    <div class="shot"><img src="${c.shot}" /></div>
+    ${c.phone
+      ? `<div class="phone"><span class="island"></span><img src="${c.shot}" /></div>`
+      : `<div class="shot"><img src="${c.shot}" /></div>`}
   `
   // A real file, not setContent: an about:blank page cannot load file:// images.
   writeFileSync(`${HERE}card.html`, html)
