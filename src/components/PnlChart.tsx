@@ -54,7 +54,7 @@ interface PnlChartProps {
 const HEIGHT = 466
 const PAD = { top: 34, right: 96, bottom: 82, left: 64 }
 /** The minimap under the axis: the whole ledger, with the window drawn on it. */
-const RAIL = { height: 18, bottom: 10, grab: 10 }
+const RAIL = { height: 18, bottom: 10, grab: 10, button: 46, gap: 10 }
 const MIN_LABEL_SLOT = 52
 
 function useWidth() {
@@ -713,17 +713,30 @@ export function PnlChart({
           is the part nobody has to discover. */}
       {zoomable && (
         <>
+          {/* One width for the pair, each the same distance off the rail: the
+              gutters they sit in are not the same size, so neither end can set
+              it. */}
           <ZoomButton
             label="Zoom out"
             disabled={showingAll}
             onClick={() => step(1 / 0.7)}
-            style={{ left: 0, width: PAD.left - 10, bottom: RAIL.bottom, height: RAIL.height }}
+            style={{
+              left: PAD.left - RAIL.gap - RAIL.button,
+              width: RAIL.button,
+              bottom: RAIL.bottom,
+              height: RAIL.height,
+            }}
           />
           <ZoomButton
             label="Zoom in"
             disabled={tightest}
             onClick={() => step(0.7)}
-            style={{ right: 0, width: PAD.right - 10, bottom: RAIL.bottom, height: RAIL.height }}
+            style={{
+              left: PAD.left + innerW + RAIL.gap,
+              width: RAIL.button,
+              bottom: RAIL.bottom,
+              height: RAIL.height,
+            }}
           />
         </>
       )}
