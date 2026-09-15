@@ -1,8 +1,12 @@
 import {
+  useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
 } from 'react'
 import {
   formatAxis,
@@ -11,6 +15,16 @@ import {
   formatShortDate,
   formatSignedCurrency,
 } from '@/lib/format'
+import {
+  MIN_SPAN,
+  clampView,
+  fullView,
+  isFullView,
+  panView,
+  sameView,
+  zoomView,
+  type PlotView,
+} from '@/lib/plotView'
 import { cn } from '@/lib/utils'
 
 export interface ChartBar {
@@ -109,13 +123,26 @@ export function PnlChart({
   className,
 }: PnlChartProps) {
   const [ref, width] = useWidth()
+  const svgRef = useRef<SVGSVGElement>(null)
   const [active, setActive] = useState<number | null>(null)
+  // Null is "show everything", which is also what a new ledger should get: a
+  // stored window would otherwise outlive the days it was framing.
+  const [window_, setWindow] = useState<PlotView | null>(null)
+  const [dragging, setDragging] = useState(false)
 
   const innerW = Math.max(0, width - PAD.left - PAD.right)
   const innerH = HEIGHT - PAD.top - PAD.bottom
   const nets = bars.map((b) => b.runningNet)
-  const slot = bars.length > 0 ? innerW / bars.length : innerW
-  const x = (i: number) => PAD.left + slot * (i + 0.5)
+  const total = bars.length
+  // Clamped on the way out rather than on the way in, so days arriving or
+  // leaving the ledger cannot strand the view outside them.
+  const view = window_ ? clampView(window_, total) : fullView(total)
+  const zoomable = total > MIN_SPAN
+  const slot = innerW / view.span
+  /** The middle of day `i`, where its marker sits. */
+  const x = (i: number) => PAD.left + (i + 0.5 - view.start) * slot
+  /** The boundary before day `i`, where its column starts. */
+  const edge = (i: number) => PAD.left + (i - view.start) * slot
   const labelEvery = Math.max(1, Math.ceil(MIN_LABEL_SLOT / slot))
   const firstPlanned = bars.findIndex((b) => b.kind === 'planned')
   const lastRecorded = firstPlanned < 0 ? bars.length - 1 : firstPlanned - 1
@@ -189,6 +216,139 @@ export function PnlChart({
   )
   const progress = target > 0 ? Math.max(0, Math.min(1, madeSoFar / target)) : 0
 
+  // --- panning and zooming --------------------------------------------------
+  // A trader with two months logged needs to get in close on last week without
+  // losing the payout line. The gestures read live geometry from a ref rather
+  // than a render's copy of it, so a wheel spin or a drag that outruns React
+  // still lands where the pointer was.
+  const geom = useRef({ view, total, innerW })
+  geom.current = { view, total, innerW }
+
+  /** Applies a window, and says whether it actually moved. */
+  const commit = useCallback((next: PlotView) => {
+    if (sameView(geom.current.view, next)) return false
+    geom.current = { ...geom.current, view: next }
+    setWindow(next)
+    return true
+  }, [])
+
+  const reset = useCallback(() => {
+    geom.current = { ...geom.current, view: fullView(geom.current.total) }
+    setWindow(null)
+  }, [])
+
+  /** Where a client x falls across the plot: 0 at its left edge, 1 at its right. */
+  const across = useCallback((clientX: number) => {
+    const box = svgRef.current?.getBoundingClientRect()
+    if (!box || geom.current.innerW <= 0) return 0.5
+    const at = (clientX - box.left - PAD.left) / geom.current.innerW
+    return Math.min(Math.max(at, 0), 1)
+  }, [])
+
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      const { view: now, total: days, innerW: w } = geom.current
+      if (days <= MIN_SPAN || w <= 0) return
+      // A trackpad's sideways swipe pans; a wheel's turn zooms.
+      const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY)
+      const next = sideways
+        ? panView(now, days, (e.deltaX / w) * now.span)
+        : zoomView(now, days, Math.exp(e.deltaY * 0.002), across(e.clientX))
+      // Claim the gesture only when it moves the plot, so at either extreme the
+      // page goes on scrolling rather than the chart swallowing the wheel.
+      if (commit(next)) e.preventDefault()
+    }
+    // Not React's onWheel: that listener is passive, and a passive listener
+    // cannot preventDefault, so the page would scroll as well as the chart.
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [across, commit])
+
+  const pointers = useRef(new Map<number, number>())
+  const drag = useRef<{ x: number; view: PlotView } | null>(null)
+  const pinch = useRef<{ gap: number; at: number; view: PlotView } | null>(null)
+
+  function onPointerDown(e: ReactPointerEvent<SVGSVGElement>) {
+    if (!zoomable || (e.pointerType === 'mouse' && e.button !== 0)) return
+    pointers.current.set(e.pointerId, e.clientX)
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    const xs = [...pointers.current.values()]
+    if (xs.length >= 2) {
+      pinch.current = {
+        gap: Math.max(Math.abs(xs[0] - xs[1]), 1),
+        at: across((xs[0] + xs[1]) / 2),
+        view: geom.current.view,
+      }
+      drag.current = null
+    } else {
+      drag.current = { x: e.clientX, view: geom.current.view }
+    }
+  }
+
+  function onPointerMove(e: ReactPointerEvent<SVGSVGElement>) {
+    if (!pointers.current.has(e.pointerId)) return
+    pointers.current.set(e.pointerId, e.clientX)
+    const { total: days, innerW: w } = geom.current
+    const xs = [...pointers.current.values()]
+    if (pinch.current && xs.length >= 2) {
+      const gap = Math.max(Math.abs(xs[0] - xs[1]), 1)
+      setDragging(true)
+      commit(
+        zoomView(pinch.current.view, days, pinch.current.gap / gap, pinch.current.at),
+      )
+    } else if (drag.current && w > 0) {
+      const moved = e.clientX - drag.current.x
+      // A click is not a drag: nothing moves until the pointer means it.
+      if (!dragging && Math.abs(moved) < 3) return
+      if (!dragging) {
+        setDragging(true)
+        setActive(null)
+      }
+      commit(panView(drag.current.view, days, (-moved / w) * drag.current.view.span))
+    }
+  }
+
+  function endPointer(e: ReactPointerEvent<SVGSVGElement>) {
+    pointers.current.delete(e.pointerId)
+    if (pointers.current.size < 2) pinch.current = null
+    if (pointers.current.size === 0) {
+      drag.current = null
+      setDragging(false)
+      return
+    }
+    // A finger lifted out of a pinch: go on panning from where the other one is.
+    const [held] = [...pointers.current.values()]
+    drag.current = { x: held, view: geom.current.view }
+  }
+
+  function onKeyDown(e: ReactKeyboardEvent<SVGSVGElement>) {
+    if (!zoomable) return
+    const { view: now, total: days } = geom.current
+    const step = Math.max(1, Math.round(now.span / 8))
+    if (e.key === '0') {
+      reset()
+      e.preventDefault()
+      return
+    }
+    const next =
+      e.key === 'ArrowLeft'
+        ? panView(now, days, -step)
+        : e.key === 'ArrowRight'
+          ? panView(now, days, step)
+          : e.key === '+' || e.key === '='
+            ? zoomView(now, days, 0.7, 0.5)
+            : e.key === '-' || e.key === '_'
+              ? zoomView(now, days, 1 / 0.7, 0.5)
+              : null
+    if (next && commit(next)) e.preventDefault()
+  }
+
+  const showingAll = isFullView(view, total)
+  const firstShown = Math.min(total - 1, Math.max(0, Math.floor(view.start)))
+  const lastShown = Math.min(total - 1, Math.ceil(view.start + view.span) - 1)
+
   return (
     <figure className={cn('relative m-0', className)} ref={ref}>
       {target > 0 && bars.length > 0 && (
@@ -214,8 +374,28 @@ export function PnlChart({
           </div>
         </div>
       )}
-      <svg width={width} height={HEIGHT} className="block" role="group"
-        aria-label="Cumulative profit against the payout target, with the consistency corridor each day has to land in.">
+      <svg
+        ref={svgRef}
+        width={width}
+        height={HEIGHT}
+        // pan-y so a finger dragging down still scrolls the page: only
+        // sideways belongs to the chart.
+        className={cn(
+          'block touch-pan-y select-none',
+          zoomable && (dragging ? 'cursor-grabbing' : 'cursor-grab'),
+        )}
+        role="group"
+        aria-label={
+          showingAll
+            ? 'Cumulative profit against the payout target, with the consistency corridor each day has to land in.'
+            : `Cumulative profit against the payout target. Showing ${formatLongDate(bars[firstShown].date)} to ${formatLongDate(bars[lastShown].date)}, ${lastShown - firstShown + 1} of ${total} days.`
+        }
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endPointer}
+        onPointerCancel={endPointer}
+        onKeyDown={onKeyDown}
+      >
         <defs>
           <linearGradient id="climb-fill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" className="text-profit" stopColor="currentColor" stopOpacity="0.34" />
@@ -231,6 +411,12 @@ export function PnlChart({
             <stop offset="0%" className="text-plan" stopColor="currentColor" stopOpacity="0.20" />
             <stop offset="100%" className="text-plan" stopColor="currentColor" stopOpacity="0.01" />
           </linearGradient>
+          {/* The window's edges. Days panned out of view stop here rather than
+              spilling over the axis and its labels — and a clipped hit area
+              takes no pointer events, so only what is shown is hoverable. */}
+          <clipPath id="climb-window">
+            <rect x={PAD.left} y={0} width={innerW} height={HEIGHT} />
+          </clipPath>
         </defs>
 
         {ticks.map((t) => (
@@ -260,6 +446,7 @@ export function PnlChart({
           </g>
         )}
 
+        <g clipPath="url(#climb-window)">
         {/* The consistency corridor: every day inside it keeps the plan on
             track without moving the target. Above it the target rises, below
             it the payout slips further out. */}
@@ -314,10 +501,10 @@ export function PnlChart({
         {/* Where today ends and the plan begins. */}
         {firstPlanned > 0 && (
           <g>
-            <line x1={PAD.left + slot * firstPlanned} x2={PAD.left + slot * firstPlanned}
+            <line x1={edge(firstPlanned)} x2={edge(firstPlanned)}
               y1={PAD.top - 10} y2={HEIGHT - PAD.bottom}
               className="stroke-axis" strokeWidth={1} strokeDasharray="3 4" />
-            <text x={PAD.left + slot * firstPlanned + 6} y={PAD.top - 14}
+            <text x={edge(firstPlanned) + 6} y={PAD.top - 14}
               className="fill-muted-foreground text-[10px] tracking-wide uppercase">
               From here
             </text>
@@ -350,13 +537,15 @@ export function PnlChart({
         )}
 
         {bars.map((b, i) => (
-          <rect key={`hit-${b.key}`} x={PAD.left + slot * i} y={PAD.top} width={slot}
+          <rect key={`hit-${b.key}`} x={edge(i)} y={PAD.top} width={slot}
             height={innerH} fill="transparent" tabIndex={0}
             aria-label={`${formatLongDate(b.date)}, ${b.kind === 'planned' ? 'planned ' : ''}${formatSignedCurrency(b.amount)}, running ${formatCurrency(b.runningNet)}`}
             className="outline-none focus-visible:fill-foreground/5"
-            onMouseEnter={() => setActive(i)} onMouseLeave={() => setActive(null)}
+            onMouseEnter={() => !dragging && setActive(i)}
+            onMouseLeave={() => setActive(null)}
             onFocus={() => setActive(i)} onBlur={() => setActive(null)} />
         ))}
+        </g>
       </svg>
 
       {activeBar && tooltipStyle && (
@@ -413,17 +602,23 @@ export function PnlChart({
           <span aria-hidden className="h-0.5 w-4 rounded bg-profit" />
           {recordedCount} day{recordedCount === 1 ? '' : 's'} logged
         </span>
-        {/* Both paces are dashed in the plot, so their swatches are too. */}
-        <span className="inline-flex items-center gap-2">
-          <span aria-hidden
-            className="h-0.5 w-4 bg-[repeating-linear-gradient(90deg,var(--plan)_0_4px,transparent_4px_7px)]" />
-          Min daily profit trajectory
-        </span>
-        <span className="inline-flex items-center gap-2">
-          <span aria-hidden
-            className="h-0.5 w-4 bg-[repeating-linear-gradient(90deg,var(--cap)_0_4px,transparent_4px_7px)]" />
-          Capped daily profit trajectory
-        </span>
+        {/* Both paces are dashed in the plot, so their swatches are too — and
+            each is named only when its line is actually there, which it is not
+            once the target is met and no days are left to plan. */}
+        {firstPlanned >= 0 && (
+          <span className="inline-flex items-center gap-2">
+            <span aria-hidden
+              className="h-0.5 w-4 bg-[repeating-linear-gradient(90deg,var(--plan)_0_4px,transparent_4px_7px)]" />
+            Min daily profit trajectory
+          </span>
+        )}
+        {zone && (
+          <span className="inline-flex items-center gap-2">
+            <span aria-hidden
+              className="h-0.5 w-4 bg-[repeating-linear-gradient(90deg,var(--cap)_0_4px,transparent_4px_7px)]" />
+            Capped daily profit trajectory
+          </span>
+        )}
         {zone ? (
           <span className="inline-flex items-center gap-2">
             <span aria-hidden
@@ -435,6 +630,20 @@ export function PnlChart({
         ) : (
           cap > 0 && <span>Daily cap {formatCurrency(cap)}</span>
         )}
+        {zoomable &&
+          (showingAll ? (
+            <span className="ml-auto self-center text-[11px] opacity-70">
+              Scroll to zoom, drag to pan
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={reset}
+              className="ml-auto self-center rounded border px-2 py-0.5 text-xs hover:bg-muted"
+            >
+              Show all {total} days
+            </button>
+          ))}
       </p>
     </figure>
   )

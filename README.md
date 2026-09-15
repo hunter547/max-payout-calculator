@@ -122,6 +122,13 @@ on load, by taking its logged days back off it (`balanceBasis` in
   and the daily cap that a bigger day would push the target past — with the
   **consistency corridor** shaded between them. Hovering a planned day gives the
   end-of-day balance at either pace, and what going outside the corridor costs.
+  The x axis is a window onto the days rather than the whole ledger: scroll or
+  pinch to zoom, drag or swipe sideways to pan, and from a focused day `←`/`→`
+  pan, `+`/`-` zoom and `0` shows everything again. Days are spaced by position,
+  not by date, because trading days are not contiguous and a calendar axis would
+  leave weekend-shaped holes in a chart about trading. The window maths lives in
+  [`src/lib/plotView.ts`](src/lib/plotView.ts), apart from the drawing, so it is
+  tested on its own.
 - **Day-by-day:** a ledger of each day's P&L, edited inline. An "I've taken a
   payout" switch chooses between an entered and a derived balance, on accounts
   whose payouts are not already counted by a schedule.
