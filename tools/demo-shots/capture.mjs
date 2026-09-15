@@ -118,7 +118,15 @@ async function toPlan(page, { firm, program, size, payouts = 0, days, strategy =
   const { ctx, page } = await session({ height: 1074 })
   await toPlan(page, {
     firm: 'apex', program: 'apex-eod', size: 'apex-100k-eod',
-    days: [['2026-09-08', '900'], ['2026-09-09', '780'], ['2026-09-10', '640']],
+    // Weeks of history with days still to go. How much history is possible is
+    // set by the consistency rule: days remaining means the profit so far is
+    // well short of the target, so a longer ledger is a smaller-days one.
+    days: [
+      ['2026-08-28', '260'], ['2026-08-31', '180'], ['2026-09-01', '-120'],
+      ['2026-09-02', '320'], ['2026-09-03', '210'], ['2026-09-04', '290'],
+      ['2026-09-07', '-150'], ['2026-09-08', '340'], ['2026-09-09', '195'],
+      ['2026-09-10', '280'], ['2026-09-11', '165'], ['2026-09-14', '430'],
+    ],
   })
   await page.screenshot({ path: `${OUT}/1-plan-apex.png`, clip: { x: 0, y: 0, width: 1440, height: 1074 } })
   console.log('1 headline:', (await page.locator('h1').first().innerText()).replace(/\n/g, ' '))
@@ -223,7 +231,12 @@ async function toPlan(page, { firm, program, size, payouts = 0, days, strategy =
   const { ctx, page } = await session({ height: 1296 })
   await toPlan(page, {
     firm: 'topstep', program: 'topstep-xfa-consistency', size: 'topstep-50k-xfa-consistency',
-    days: [['2026-09-09', '1400'], ['2026-09-10', '1100']],
+    days: [
+      ['2026-09-01', '380'], ['2026-09-02', '290'], ['2026-09-03', '-150'],
+      ['2026-09-04', '420'], ['2026-09-07', '210'], ['2026-09-08', '350'],
+      ['2026-09-09', '-120'], ['2026-09-10', '480'], ['2026-09-11', '260'],
+      ['2026-09-14', '380'],
+    ],
   })
   // The plan toggle is a toggle group, so it goes by its label, not a value.
   await page

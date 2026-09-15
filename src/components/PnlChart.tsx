@@ -113,6 +113,37 @@ function PaceFigure({ amount, tone }: { amount: number; tone: 'plan' | 'cap' }) 
 }
 
 /**
+ * A zoom notch. Sat in the chart's own gutters at either end of the minimap,
+ * where it says the plot can be zoomed without the reader having to try a
+ * gesture to find out.
+ */
+function ZoomButton({
+  label,
+  disabled,
+  onClick,
+  style,
+}: {
+  label: string
+  disabled: boolean
+  onClick: () => void
+  style: CSSProperties
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      style={style}
+      className="absolute inline-flex items-center justify-center rounded border bg-card text-sm leading-none font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+    >
+      <span aria-hidden>{label === 'Zoom in' ? '+' : '−'}</span>
+    </button>
+  )
+}
+
+/**
  * The climb: cumulative profit rising towards the payout, rather than each day
  * on its own. Logged days are a solid line under a filled area; planned days
  * carry on dashed, and the target is the line they are reaching for.
@@ -420,7 +451,14 @@ export function PnlChart({
     setDragging(false)
   }
 
+  /** One notch of zoom, about the middle of what is on screen. */
+  const step = useCallback((factor: number) => {
+    const { view: now, total: days } = geom.current
+    commit(zoomView(now, days, factor, 0.5))
+  }, [commit])
+
   const showingAll = isFullView(view, total)
+  const tightest = view.span <= Math.min(MIN_SPAN, total) + 1e-9
   const firstShown = Math.min(total - 1, Math.max(0, Math.floor(view.start)))
   const lastShown = Math.min(total - 1, Math.ceil(view.start + view.span) - 1)
 
@@ -449,6 +487,7 @@ export function PnlChart({
           </div>
         </div>
       )}
+      <div className="relative">
       <svg
         ref={svgRef}
         width={width}
@@ -627,7 +666,7 @@ export function PnlChart({
             the bare rail to jump. Hidden from assistive tech on purpose — it is
             a pointer shortcut for what the arrow keys already do on a day. */}
         {zoomable && (
-          <g>
+          <g className="group">
             {/* Tinted off the foreground rather than filled with a theme's
                 muted colour, which on the darker themes is the card's own. */}
             <rect x={PAD.left} y={railTop} width={innerW} height={RAIL.height}
@@ -639,10 +678,14 @@ export function PnlChart({
             {/* The window, lit rather than the rest dimmed: one filled shape on
                 the rail reads faster than two shaded ones beside it. */}
             <rect x={windowLeft} y={railTop} width={windowWidth} height={RAIL.height}
-              rx={4} className="fill-plan"
-              // Lighter when it covers the whole rail: nothing is hidden yet,
-              // so it should read as an invitation rather than a state.
-              fillOpacity={showingAll ? 0.1 : 0.2} />
+              rx={4}
+              className={cn(
+                'fill-plan transition-opacity',
+                // Lighter when it covers the whole rail: nothing is hidden yet,
+                // so it should read as an invitation rather than a state.
+                showingAll ? 'opacity-[0.10]' : 'opacity-20',
+                'group-hover:opacity-40',
+              )} />
             <rect x={windowLeft} y={railTop} width={windowWidth} height={RAIL.height}
               rx={4} fill="none" strokeWidth={1.5} className="stroke-plan" />
             {/* The grips: what says an end can be taken hold of and dragged. */}
@@ -664,6 +707,27 @@ export function PnlChart({
           </g>
         )}
       </svg>
+
+      {/* At either end of the minimap, so the three together read as one zoom
+          control. Gestures are quicker once you know they are there; a button
+          is the part nobody has to discover. */}
+      {zoomable && (
+        <>
+          <ZoomButton
+            label="Zoom out"
+            disabled={showingAll}
+            onClick={() => step(1 / 0.7)}
+            style={{ left: 0, width: PAD.left - 10, bottom: RAIL.bottom, height: RAIL.height }}
+          />
+          <ZoomButton
+            label="Zoom in"
+            disabled={tightest}
+            onClick={() => step(0.7)}
+            style={{ right: 0, width: PAD.right - 10, bottom: RAIL.bottom, height: RAIL.height }}
+          />
+        </>
+      )}
+      </div>
 
       {activeBar && tooltipStyle && (
         <div className="pointer-events-none absolute z-10 min-w-72 rounded-md border bg-popover px-3 py-2 text-popover-foreground shadow-md"

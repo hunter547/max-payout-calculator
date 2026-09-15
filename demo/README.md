@@ -6,7 +6,7 @@ or caption them yourself.
 
 | Card | Size | What it shows |
 |------|------|----------------|
-| `01-the-plan` | 1600×900 | The answer: days left and the daily number, on an Apex 100k EOD |
+| `01-the-plan` | 1600×900 | The answer: days left and the daily number, on an Apex 100k EOD with a fortnight of days logged |
 | `02-payout-ready` | 1600×900 | "Payout ready" on a Tradeify 50k Growth, with the button that starts the payout flow |
 | `03-five-firms` | 1600×900 | The firm picker in dark mode, with every program and size each firm brings |
 | `04-on-phone` | 1080×1080 | The dashboard at phone width, in a phone, MyFundedFutures |
