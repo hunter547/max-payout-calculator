@@ -116,8 +116,12 @@ on load, by taking its logged days back off it (`balanceBasis` in
 
 ## The dashboard
 
-- **Headline and chart:** how many more days at how much each, plotted against
-  the daily cap. Logged days are solid columns; planned days are outlined.
+- **Headline and chart:** how many more days at how much each, plotted as a
+  climb towards the payout. Logged days are a solid line under a filled area;
+  from today two dashed trajectories carry on — the minimum that keeps the plan,
+  and the daily cap that a bigger day would push the target past — with the
+  **consistency corridor** shaded between them. Hovering a planned day gives the
+  end-of-day balance at either pace, and what going outside the corridor costs.
 - **Day-by-day:** a ledger of each day's P&L, edited inline. An "I've taken a
   payout" switch chooses between an entered and a derived balance, on accounts
   whose payouts are not already counted by a schedule.

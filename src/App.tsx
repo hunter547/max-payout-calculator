@@ -852,6 +852,8 @@ export default function App() {
               <PnlChart
                 bars={bars}
                 cap={consistencyInvalid ? 0 : shownPlan.dailyCap}
+                target={results.minimumNetProfitRequired}
+                balanceBase={inputs.balance - inputs.currentNetProfit}
                 className="mt-5 rounded-xl border bg-card px-2 pt-3 pb-4 sm:px-4"
               />
             )}
