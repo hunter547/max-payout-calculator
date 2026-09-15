@@ -124,7 +124,10 @@ on load, by taking its logged days back off it (`balanceBasis` in
   end-of-day balance at either pace, and what going outside the corridor costs.
   The x axis is a window onto the days rather than the whole ledger: scroll or
   pinch to zoom, drag or swipe sideways to pan, and from a focused day `←`/`→`
-  pan, `+`/`-` zoom and `0` shows everything again. Days are spaced by position,
+  pan, `+`/`-` zoom and `0` shows everything again. Under the axis is a minimap
+  of the whole ledger with the window drawn on it: it says the plot moves, says
+  where in the ledger you are, and is itself a control — drag it to pan, drag
+  either end to resize, click the bare rail to jump. Days are spaced by position,
   not by date, because trading days are not contiguous and a calendar axis would
   leave weekend-shaped holes in a chart about trading. The window maths lives in
   [`src/lib/plotView.ts`](src/lib/plotView.ts), apart from the drawing, so it is

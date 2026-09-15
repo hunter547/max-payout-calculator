@@ -115,12 +115,12 @@ async function toPlan(page, { firm, program, size, payouts = 0, days, strategy =
 
 // ---------------------------------------------------------------- 1. the plan
 {
-  const { ctx, page } = await session({ height: 1120 })
+  const { ctx, page } = await session({ height: 1074 })
   await toPlan(page, {
     firm: 'apex', program: 'apex-eod', size: 'apex-100k-eod',
     days: [['2026-09-08', '900'], ['2026-09-09', '780'], ['2026-09-10', '640']],
   })
-  await page.screenshot({ path: `${OUT}/1-plan-apex.png`, clip: { x: 0, y: 0, width: 1440, height: 1120 } })
+  await page.screenshot({ path: `${OUT}/1-plan-apex.png`, clip: { x: 0, y: 0, width: 1440, height: 1074 } })
   console.log('1 headline:', (await page.locator('h1').first().innerText()).replace(/\n/g, ' '))
   await ctx.close()
 }
@@ -220,7 +220,7 @@ async function toPlan(page, { firm, program, size, payouts = 0, days, strategy =
 
 // ------------------------------------------------------------ 8. curated plans
 {
-  const { ctx, page } = await session({ height: 1240 })
+  const { ctx, page } = await session({ height: 1296 })
   await toPlan(page, {
     firm: 'topstep', program: 'topstep-xfa-consistency', size: 'topstep-50k-xfa-consistency',
     days: [['2026-09-09', '1400'], ['2026-09-10', '1100']],
@@ -231,7 +231,7 @@ async function toPlan(page, { firm, program, size, payouts = 0, days, strategy =
     .getByText('Curated', { exact: true })
     .click()
   await page.waitForTimeout(700)
-  await page.screenshot({ path: `${OUT}/8-curated.png`, clip: { x: 0, y: 0, width: 1440, height: 1240 } })
+  await page.screenshot({ path: `${OUT}/8-curated.png`, clip: { x: 0, y: 0, width: 1440, height: 1296 } })
   console.log('8 curated captured')
   await ctx.close()
 }

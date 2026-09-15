@@ -51,8 +51,10 @@ interface PnlChartProps {
   className?: string
 }
 
-const HEIGHT = 436
-const PAD = { top: 34, right: 96, bottom: 52, left: 64 }
+const HEIGHT = 466
+const PAD = { top: 34, right: 96, bottom: 82, left: 64 }
+/** The minimap under the axis: the whole ledger, with the window drawn on it. */
+const RAIL = { height: 18, bottom: 10, grab: 10 }
 const MIN_LABEL_SLOT = 52
 
 function useWidth() {
@@ -345,6 +347,79 @@ export function PnlChart({
     if (next && commit(next)) e.preventDefault()
   }
 
+  // --- the minimap ----------------------------------------------------------
+  // The whole ledger at a glance with the window drawn over it: it says the
+  // plot can be moved, says where in the ledger you are, and is a way to move
+  // it. Only worth drawing when there is more than a window's worth of days.
+  const railTop = HEIGHT - RAIL.bottom - RAIL.height
+  const railOf = (i: number) => PAD.left + ((i + 0.5) / total) * innerW
+  const railLo = Math.min(0, ...nets)
+  const railHi = Math.max(1, ...nets)
+  const railY = (v: number) =>
+    railTop + RAIL.height - ((v - railLo) / (railHi - railLo || 1)) * RAIL.height
+  const railPath = bars
+    .map((b, i) => `${i === 0 ? 'M' : 'L'}${railOf(i)},${railY(b.runningNet)}`)
+    .join(' ')
+  const windowLeft = PAD.left + (view.start / total) * innerW
+  const windowWidth = (view.span / total) * innerW
+
+  /** Where a client x falls along the rail, as a day index. */
+  const railDay = useCallback((clientX: number) => {
+    const box = svgRef.current?.getBoundingClientRect()
+    const { total: days, innerW: w } = geom.current
+    if (!box || w <= 0) return 0
+    const at = Math.min(Math.max((clientX - box.left - PAD.left) / w, 0), 1)
+    return at * days
+  }, [])
+
+  const rail = useRef<{ mode: 'move' | 'start' | 'end'; grabbed: number } | null>(
+    null,
+  )
+
+  function onRailDown(e: ReactPointerEvent<SVGRectElement>) {
+    e.stopPropagation()
+    if (!zoomable) return
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    const { view: now, total: days, innerW: w } = geom.current
+    const day = railDay(e.clientX)
+    const perDay = w / days
+    const fromStart = (day - now.start) * perDay
+    const fromEnd = (day - (now.start + now.span)) * perDay
+    if (Math.abs(fromStart) <= RAIL.grab) rail.current = { mode: 'start', grabbed: 0 }
+    else if (Math.abs(fromEnd) <= RAIL.grab) rail.current = { mode: 'end', grabbed: 0 }
+    else if (fromStart > 0 && fromEnd < 0)
+      rail.current = { mode: 'move', grabbed: day - now.start }
+    else {
+      // A click on bare rail brings the window to it, centred.
+      rail.current = { mode: 'move', grabbed: now.span / 2 }
+      commit(clampView({ start: day - now.span / 2, span: now.span }, days))
+    }
+    setDragging(true)
+    setActive(null)
+  }
+
+  function onRailMove(e: ReactPointerEvent<SVGRectElement>) {
+    e.stopPropagation()
+    const held = rail.current
+    if (!held) return
+    const { view: now, total: days } = geom.current
+    const day = railDay(e.clientX)
+    if (held.mode === 'move') {
+      commit(clampView({ start: day - held.grabbed, span: now.span }, days))
+    } else if (held.mode === 'start') {
+      const end = now.start + now.span
+      commit(clampView({ start: Math.min(day, end - 1), span: end - Math.min(day, end - 1) }, days))
+    } else {
+      commit(clampView({ start: now.start, span: Math.max(day - now.start, 1) }, days))
+    }
+  }
+
+  function onRailUp(e: ReactPointerEvent<SVGRectElement>) {
+    e.stopPropagation()
+    rail.current = null
+    setDragging(false)
+  }
+
   const showingAll = isFullView(view, total)
   const firstShown = Math.min(total - 1, Math.max(0, Math.floor(view.start)))
   const lastShown = Math.min(total - 1, Math.ceil(view.start + view.span) - 1)
@@ -546,6 +621,48 @@ export function PnlChart({
             onFocus={() => setActive(i)} onBlur={() => setActive(null)} />
         ))}
         </g>
+
+        {/* The minimap: the whole ledger in miniature, the window lit on top of
+            it, and the rest dimmed. Drag it to pan, drag an end to zoom, click
+            the bare rail to jump. Hidden from assistive tech on purpose — it is
+            a pointer shortcut for what the arrow keys already do on a day. */}
+        {zoomable && (
+          <g>
+            {/* Tinted off the foreground rather than filled with a theme's
+                muted colour, which on the darker themes is the card's own. */}
+            <rect x={PAD.left} y={railTop} width={innerW} height={RAIL.height}
+              rx={4} className="fill-foreground stroke-grid" fillOpacity={0.05}
+              strokeWidth={1} />
+            <path d={railPath} fill="none" strokeWidth={1.25}
+              className="stroke-muted-foreground" strokeOpacity={0.6}
+              strokeLinecap="round" strokeLinejoin="round" />
+            {/* The window, lit rather than the rest dimmed: one filled shape on
+                the rail reads faster than two shaded ones beside it. */}
+            <rect x={windowLeft} y={railTop} width={windowWidth} height={RAIL.height}
+              rx={4} className="fill-plan"
+              // Lighter when it covers the whole rail: nothing is hidden yet,
+              // so it should read as an invitation rather than a state.
+              fillOpacity={showingAll ? 0.1 : 0.2} />
+            <rect x={windowLeft} y={railTop} width={windowWidth} height={RAIL.height}
+              rx={4} fill="none" strokeWidth={1.5} className="stroke-plan" />
+            {/* The grips: what says an end can be taken hold of and dragged. */}
+            {[windowLeft, windowLeft + windowWidth].map((gx, i) => (
+              <g key={i}>
+                <rect x={gx - 2.5} y={railTop + 2} width={5} height={RAIL.height - 4}
+                  rx={2.5} className="fill-plan" />
+                <line x1={gx} x2={gx} y1={railTop + 5} y2={railTop + RAIL.height - 5}
+                  className="stroke-card" strokeWidth={1} strokeOpacity={0.8} />
+              </g>
+            ))}
+            <rect x={PAD.left} y={railTop - 4} width={innerW} height={RAIL.height + 8}
+              fill="transparent" aria-hidden="true"
+              className={cn(dragging ? 'cursor-grabbing' : 'cursor-grab')}
+              onPointerDown={onRailDown}
+              onPointerMove={onRailMove}
+              onPointerUp={onRailUp}
+              onPointerCancel={onRailUp} />
+          </g>
+        )}
       </svg>
 
       {activeBar && tooltipStyle && (
@@ -631,11 +748,7 @@ export function PnlChart({
           cap > 0 && <span>Daily cap {formatCurrency(cap)}</span>
         )}
         {zoomable &&
-          (showingAll ? (
-            <span className="ml-auto self-center text-[11px] opacity-70">
-              Scroll to zoom, drag to pan
-            </span>
-          ) : (
+          (showingAll ? null : (
             <button
               type="button"
               onClick={reset}
