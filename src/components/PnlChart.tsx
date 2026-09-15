@@ -567,7 +567,7 @@ export function PnlChart({
         {bars.map((b, i) => (
           <circle key={b.key} cx={x(i)} cy={y(b.runningNet)} r={active === i ? 6 : 4}
             className={cn(
-              'transition-all duration-150',
+              'transition-[r] duration-150',
               b.kind === 'planned' ? 'fill-card stroke-plan' : 'fill-profit stroke-card',
             )}
             strokeWidth={2} />
@@ -594,7 +594,7 @@ export function PnlChart({
             b.kind === 'planned' ? (
               <circle key={`cap-${b.key}`} cx={x(i)} cy={y(capAt(i))}
                 r={active === i ? 6 : 4}
-                className="fill-card stroke-cap transition-all duration-150"
+                className="fill-card stroke-cap transition-[r] duration-150"
                 strokeWidth={2} />
             ) : null,
           )}
