@@ -52,7 +52,17 @@ interface PnlChartProps {
 }
 
 const HEIGHT = 466
+/**
+ * `right` is a starting guess only: the real gutter is measured from the payout
+ * label, so the plot reaches as far right as it can. Reserving a fixed width
+ * for a label whose text varies leaves a different amount of air on every
+ * account, and always more than the axis labels leave on the left.
+ */
 const PAD = { top: 34, right: 96, bottom: 82, left: 64 }
+/** What the widest label leaves to the edge on the left, which the right matches. */
+const EDGE = 14
+/** Between the payout line and its label. */
+const LABEL_GAP = 8
 /** The minimap under the axis: the whole ledger, with the window drawn on it. */
 const RAIL = { height: 18, bottom: 10, grab: 10, button: 46, gap: 10 }
 const MIN_LABEL_SLOT = 52
@@ -163,7 +173,12 @@ export function PnlChart({
   const [window_, setWindow] = useState<PlotView | null>(null)
   const [dragging, setDragging] = useState(false)
 
-  const innerW = Math.max(0, width - PAD.left - PAD.right)
+  // Measured from the payout label, falling back to the reserve until it has
+  // been drawn once.
+  const payoutLabelRef = useRef<SVGGElement>(null)
+  const [labelW, setLabelW] = useState(0)
+  const padRight = labelW > 0 ? LABEL_GAP + labelW + EDGE : PAD.right
+  const innerW = Math.max(0, width - PAD.left - padRight)
   const innerH = HEIGHT - PAD.top - PAD.bottom
   const nets = bars.map((b) => b.runningNet)
   const total = bars.length
@@ -215,6 +230,28 @@ export function PnlChart({
     Math.max(target, 1, zone?.overY ?? 0, ...nets) * 1.08,
   )
   const y = (v: number) => PAD.top + ((hi - v) / (hi - lo)) * innerH
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = payoutLabelRef.current
+      // No getBBox outside a real layout engine: under jsdom the reserve
+      // stands in, which is what the chart drew before it was measured at all.
+      if (!el || typeof el.getBBox !== 'function') {
+        setLabelW(0)
+        return
+      }
+      const measured = Math.ceil(el.getBBox().width)
+      if (measured > 0) setLabelW((was) => (was === measured ? was : measured))
+    }
+    measure()
+    // The label is set in a web font. Measured before it loads, the gutter
+    // would be sized for whatever the fallback happened to be.
+    let live = true
+    document.fonts?.ready.then(() => live && measure())
+    return () => {
+      live = false
+    }
+  }, [target, width])
 
   const line = (from: number, to: number) =>
     bars
@@ -535,7 +572,7 @@ export function PnlChart({
 
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={PAD.left} x2={width - PAD.right} y1={y(t)} y2={y(t)}
+            <line x1={PAD.left} x2={width - padRight} y1={y(t)} y2={y(t)}
               className="stroke-grid" strokeWidth={1} />
             <text x={PAD.left - 12} y={y(t)} dy="0.32em" textAnchor="end"
               className="fill-muted-foreground font-figure text-[11px]">
@@ -547,16 +584,20 @@ export function PnlChart({
         {/* The finish line, and the gap still to climb. */}
         {target > 0 && (
           <g>
-            <line x1={PAD.left} x2={width - PAD.right} y1={y(target)} y2={y(target)}
+            <line x1={PAD.left} x2={width - padRight} y1={y(target)} y2={y(target)}
               className="stroke-cap" strokeWidth={2} strokeDasharray="1 0" />
-            <text x={width - PAD.right + 8} y={y(target)} dy="0.32em"
-              className="fill-foreground text-xs font-semibold">
-              Payout
-            </text>
-            <text x={width - PAD.right + 8} y={y(target) + 15} dy="0.32em"
-              className="fill-muted-foreground font-figure text-[11px]">
-              {formatCurrency(target)}
-            </text>
+            {/* The labels alone, so the measured box is theirs and not the
+                full-width line's. */}
+            <g ref={payoutLabelRef}>
+              <text x={width - padRight + LABEL_GAP} y={y(target)} dy="0.32em"
+                className="fill-foreground text-xs font-semibold">
+                Payout
+              </text>
+              <text x={width - padRight + LABEL_GAP} y={y(target) + 15} dy="0.32em"
+                className="fill-muted-foreground font-figure text-[11px]">
+                {formatCurrency(target)}
+              </text>
+            </g>
           </g>
         )}
 
@@ -638,7 +679,7 @@ export function PnlChart({
             ) : null,
           )}
 
-        <line x1={PAD.left} x2={width - PAD.right} y1={y(0)} y2={y(0)}
+        <line x1={PAD.left} x2={width - padRight} y1={y(0)} y2={y(0)}
           className="stroke-axis" strokeWidth={1} />
 
         {bars.map((b, i) =>
