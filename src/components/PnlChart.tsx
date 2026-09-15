@@ -30,9 +30,10 @@ interface PnlChartProps {
   target?: number
   /**
    * What the account held before any of this profit: the balance the plotted
-   * net profit sits on top of. Without it a day's figures are profit only.
+   * net profit sits on top of. Required, because the tooltip labels its figures
+   * as balances, and a default would quietly label net profit as one.
    */
-  balanceBase?: number
+  balanceBase: number
   className?: string
 }
 
@@ -104,7 +105,7 @@ export function PnlChart({
   bars,
   cap,
   target = 0,
-  balanceBase = 0,
+  balanceBase,
   className,
 }: PnlChartProps) {
   const [ref, width] = useWidth()
