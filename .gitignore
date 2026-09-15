@@ -26,3 +26,7 @@ dist-ssr
 # Demo captures are regenerated from tools/demo-shots; only demo/ is kept.
 tools/demo-shots/out/
 tools/demo-shots/card.html
+
+# Scratch screenshots from chart experiments, which land beside the capture
+# scripts rather than in their ignored out/ directory.
+tools/demo-shots/chart-*.png
