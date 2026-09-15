@@ -18,11 +18,20 @@ mkdirSync(OUT, { recursive: true })
 const browser = await chromium.launch({ channel: 'msedge' })
 const errors = []
 
-async function session({ width = 1440, height = 960, scale = 2, dark = false } = {}) {
+async function session({
+  width = 1440,
+  height = 960,
+  scale = 2,
+  dark = false,
+  // Everything is captured still, so nothing is caught mid-transition — but
+  // the confetti bows out entirely under reduced motion, so the payout screen
+  // has to ask for it.
+  motion = false,
+} = {}) {
   const ctx = await browser.newContext({
     viewport: { width, height },
     deviceScaleFactor: scale,
-    reducedMotion: 'reduce',
+    reducedMotion: motion ? 'no-preference' : 'reduce',
   })
   const page = await ctx.newPage()
   page.on('pageerror', (e) => errors.push(String(e)))
@@ -229,7 +238,7 @@ async function toPlan(page, { firm, program, size, payouts = 0, days, strategy =
 
 // ------------------------------------------------------------- 9. taking one
 {
-  const { ctx, page } = await session({ height: 900 })
+  const { ctx, page } = await session({ height: 900, motion: true })
   await toPlan(page, {
     firm: 'mffu', program: 'mffu-builder', size: 'mffu-50k-builder',
     days: [['2026-09-04', '900'], ['2026-09-07', '800'], ['2026-09-08', '700'],
