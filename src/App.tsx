@@ -554,6 +554,9 @@ export default function App() {
             }
           : SNAPSHOT_DEFAULTS,
       days: result.approach === 'dayByDay' ? result.days : [],
+      // The balance typed in the walkthrough is where the cycle began; the
+      // logged days are added onto it, never folded into it.
+      balanceBasis: 'cycleStart',
     }
 
     // A first or added account joins the list; otherwise this is the open one
@@ -694,9 +697,8 @@ export default function App() {
       : null,
   )
 
-  const balanceDisplay: BalanceDisplay = balanceEntered
-    ? { kind: 'input' }
-    : {
+  const balanceDisplay: BalanceDisplay = !balanceEntered
+    ? {
         kind: 'derived',
         value: inputs.balance,
         from:
@@ -704,6 +706,9 @@ export default function App() {
             ? 'your logged days'
             : 'your cumulative profit',
       }
+    : approach === 'dayByDay'
+      ? { kind: 'fromPayout', current: inputs.balance }
+      : { kind: 'input' }
 
   /** A sensible first curated plan: the conservative day count, in range. */
   function startingCurated(): CuratedDraft {

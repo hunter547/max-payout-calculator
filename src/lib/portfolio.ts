@@ -12,7 +12,7 @@ import {
   templateLabel,
   type AccountKey,
 } from '@/lib/accounts'
-import { newId, type DayEntry } from '@/lib/ledger'
+import { newId, parseAmount, summarize, type DayEntry } from '@/lib/ledger'
 import { legacySetup, type Setup, type Snapshot } from '@/lib/setup'
 
 export interface Account {
@@ -23,6 +23,14 @@ export interface Account {
   rules: Record<AccountKey, string>
   snapshot: Snapshot
   days: DayEntry[]
+  /**
+   * What `rules.balance` means on a day-by-day account that has taken a
+   * payout. It used to be the balance as of the moment it was typed, which
+   * went stale the next time a day was logged; now it is where the cycle
+   * began, and the ledger carries it from there. Absent on anything saved
+   * before that changed, which `loadAccounts` converts once.
+   */
+  balanceBasis?: 'cycleStart'
 }
 
 export const SNAPSHOT_DEFAULTS: Snapshot = {
@@ -49,6 +57,7 @@ export function newAccount(setup: Setup, nickname = ''): Account {
     rules: accountFor(accountTemplate(setup.templateId)),
     snapshot: SNAPSHOT_DEFAULTS,
     days: [],
+    balanceBasis: 'cycleStart',
   }
 }
 
@@ -57,9 +66,29 @@ export function newAccount(setup: Setup, nickname = ''): Account {
  * across on first load. Storage written before accounts had ids keeps its
  * ledger, its rules and its place; there is only ever one of it.
  */
+/**
+ * A balance saved as "as of now" becomes the balance the cycle started from,
+ * by taking the logged days back off it. Only day-by-day accounts that have
+ * taken a payout ever stored it the other way.
+ */
+function onCycleStart(account: Account): Account {
+  if (account.balanceBasis === 'cycleStart') return account
+  const { approach, payoutTaken } = account.setup
+  if (approach !== 'dayByDay' || !payoutTaken) {
+    return { ...account, balanceBasis: 'cycleStart' }
+  }
+  const since = summarize(account.days).netProfit
+  const balance = parseAmount(account.rules.balance) - since
+  return {
+    ...account,
+    rules: { ...account.rules, balance: String(Math.round(balance * 100) / 100) },
+    balanceBasis: 'cycleStart',
+  }
+}
+
 export function loadAccounts(): Account[] {
   const stored = read<Account[]>('mpc.accounts')
-  if (Array.isArray(stored) && stored.length > 0) return stored
+  if (Array.isArray(stored) && stored.length > 0) return stored.map(onCycleStart)
 
   const setup = read<Setup>('mpc.setup') ?? legacySetup()
   if (!setup) return []
@@ -75,7 +104,7 @@ export function loadAccounts(): Account[] {
       snapshot: { ...SNAPSHOT_DEFAULTS, ...read<Snapshot>('mpc.snapshot') },
       days: read<DayEntry[]>('mpc.days') ?? [],
     },
-  ]
+  ].map(onCycleStart)
 }
 
 /**

@@ -113,7 +113,7 @@ const APPROACHES: {
     summary:
       'Log each trading day. Your largest day, cumulative profit, and trading days are worked out for you.',
     provides: ({ balance }) => [
-      ...(balance ? ['Current balance'] : []),
+      ...(balance ? ['Balance after your last payout'] : []),
       'Each day’s profit, positive or negative',
     ],
   },
@@ -206,10 +206,17 @@ function stepCopy(step: StepId, draft: SetupDraft) {
         lead: 'If you have, you’ll give your current balance. If not, it’s where the account started plus the profit you have made since.',
       }
     case 'balance':
-      return {
-        title: 'What’s your current balance?',
-        lead: balanceHint(draft.templateId),
-      }
+      // Day by day, the days logged next are added onto this figure, so it has
+      // to be where the cycle began rather than where the account is now.
+      return draft.approach === 'dayByDay'
+        ? {
+            title: 'What did your last payout leave?',
+            lead: balanceHint(draft.templateId, true),
+          }
+        : {
+            title: 'What’s your current balance?',
+            lead: balanceHint(draft.templateId),
+          }
     case 'largest':
       return {
         title: 'What’s your largest profit day?',
@@ -705,7 +712,11 @@ export function Walkthrough({
       body = (
         <MoneyField
           id="walkthrough-balance"
-          label="Current balance"
+          label={
+            draft.approach === 'dayByDay'
+              ? 'Balance after your last payout'
+              : 'Current balance'
+          }
           hideLabel
           size="lg"
           value={draft.balance}

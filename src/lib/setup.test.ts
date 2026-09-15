@@ -314,14 +314,24 @@ describe('deriveInputs', () => {
       netProfit: '',
       tradingDays: '',
     }
+    // The balance entered is where the cycle began — what the last payout
+    // left — so the days logged since are added onto it. Logging another day
+    // has to move the balance, or the plan keeps asking for profit already
+    // made.
     expect(
       deriveInputs({ ...source, payoutTaken: true }, summarize(days), BUILDER),
     ).toMatchObject({
-      balance: 4758.34,
+      balance: 4764.94,
       largestProfitDay: 359,
       currentNetProfit: 6.6,
       tradingDaysSoFar: 3,
     })
+
+    // One more winning day, and the balance is that much higher.
+    const more = [...days, { id: 'd', date: '2026-09-11', amount: '500' }]
+    expect(
+      deriveInputs({ ...source, payoutTaken: true }, summarize(more), BUILDER),
+    ).toMatchObject({ balance: 5264.94, currentNetProfit: 506.6 })
   })
 
   it('works a point-in-time balance out of the profit before any payout', () => {

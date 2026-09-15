@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { accountFor, accountTemplate } from './accounts'
+import { parseAmount } from './ledger'
 import {
   accountName,
   currentAccount,
@@ -46,10 +47,36 @@ describe('loadAccounts', () => {
     expect(accounts[0]).toMatchObject({
       nickname: '',
       setup: { templateId: 'tradeify-50k-growth' },
-      rules,
       days: [{ id: 'a', date: '2026-09-08', amount: '359' }],
+      balanceBasis: 'cycleStart',
+    })
+    // The balance was saved as of the day it was typed, with that $359 day
+    // already inside it; on the way across it becomes where the cycle began,
+    // so the ledger can carry it from there without counting the day twice.
+    expect(accounts[0].rules).toEqual({
+      ...rules,
+      balance: String(parseAmount(rules.balance) - 359),
     })
     expect(accounts[0].id).not.toBe('')
+  })
+
+  it('leaves a balance alone where the ledger never carried it', () => {
+    // Point-in-time states today's balance outright, and an account with no
+    // payout behind it counts up from the firm's own starting balance.
+    for (const patch of [
+      { approach: 'pointInTime' as const, payoutTaken: true },
+      { approach: 'dayByDay' as const, payoutTaken: false },
+    ]) {
+      const rules = accountFor(accountTemplate('tradeify-50k-growth'))
+      window.localStorage.setItem('mpc.accounts', JSON.stringify([
+        { ...account('tradeify-50k-growth'), rules,
+          setup: { ...setup('tradeify-50k-growth'), ...patch },
+          days: [{ id: 'a', date: '2026-09-08', amount: '359' }] },
+      ]))
+      const [carried] = loadAccounts()
+      expect(carried.rules.balance).toBe(rules.balance)
+      expect(carried.balanceBasis).toBe('cycleStart')
+    }
   })
 
   it('carries days logged before the walkthrough existed across too', () => {

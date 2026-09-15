@@ -71,7 +71,13 @@ const RULES: { key: RuleKey; label: string; unit: FieldUnit; hint: string }[] = 
 ]
 
 export type BalanceDisplay =
+  /** Typed, and true as of now: a point-in-time account after a payout. */
   | { kind: 'input' }
+  /**
+   * Typed as where the cycle began, with the ledger carrying it from there.
+   * `current` is what the logged days have made of it.
+   */
+  | { kind: 'fromPayout'; current: number }
   /** Worked out rather than typed: `from` says out of what. */
   | { kind: 'derived'; value: number; from: string }
 
@@ -210,6 +216,28 @@ export function AccountPanel({
             disabled={locked}
             onChange={(v) => onChange('balance', v)}
           />
+        ) : balance.kind === 'fromPayout' ? (
+          <>
+            <MoneyField
+              id="account-balance"
+              label="Balance after your last payout"
+              hint={balanceHint(templateId, true)}
+              value={values.balance}
+              disabled={locked}
+              onChange={(v) => onChange('balance', v)}
+            />
+            <div className="flex items-start justify-between gap-6 border-y py-3">
+              <div className="text-sm">
+                <p className="font-medium">Current balance</p>
+                <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                  That figure plus every day you have logged since.
+                </p>
+              </div>
+              <p className="font-figure text-lg font-semibold whitespace-nowrap">
+                {formatCurrency(balance.current)}
+              </p>
+            </div>
+          </>
         ) : (
           <div className="flex items-start justify-between gap-6 border-y py-3">
             <div className="text-sm">

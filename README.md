@@ -66,7 +66,8 @@ exactly what they will need.
 
 **Day-by-day.** Log each trading day instead:
 
-1. Current balance, on the same condition as above.
+1. The balance your last payout left, on the same condition as above — the
+   days you log are added onto it.
 2. Each day's profit or loss, positive or negative. You can add more later.
    The days you log are also your trading days for the firm's minimum.
 
@@ -97,7 +98,21 @@ and inviting two answers that disagree.
 
 Once a payout has been taken the two part company — a payout takes money out of
 the balance while the profit count resets to zero — so from then on both are
-asked for, and the balance is typed rather than worked out.
+asked for. What is asked for depends on the approach, and the difference
+matters:
+
+- **Point-in-time** takes the balance as of now, alongside the profit since the
+  payout. Both are typed, both are as of the same moment.
+- **Day-by-day** takes the balance *the payout left behind*, and the logged
+  days are added onto it. The ledger already knows every day since, so a
+  balance typed as "today's" would go stale the moment another day was logged:
+  the profit would climb while the balance sat still, and the plan would keep
+  asking for money already made. The dashboard shows both — the figure you
+  typed, and the current balance it adds up to.
+
+An account saved before that distinction existed has its balance converted once
+on load, by taking its logged days back off it (`balanceBasis` in
+[`src/lib/portfolio.ts`](src/lib/portfolio.ts) records that it has been done).
 
 ## The dashboard
 
@@ -125,7 +140,7 @@ Three numbers drive everything, and each comes from one of two places:
 
 | Number | Point-in-time | Day-by-day |
 |--------|---------------|------------|
-| Balance | entered | entered after a payout, else starting balance plus logged days |
+| Balance | entered after a payout, else starting balance plus cumulative profit | the balance the last payout left (or the starting balance) plus every logged day |
 | Largest profit day | entered | biggest winning day (0 until you have one) |
 | Cumulative net profit | entered | sum of every day, losses included |
 | Trading days | entered | logged days that clear the firm's profit bar |

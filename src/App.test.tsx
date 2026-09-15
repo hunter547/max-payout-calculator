@@ -478,12 +478,12 @@ describe('walkthrough', () => {
     )
   })
 
-  it('day-by-day after a payout: balance, then days', () => {
+  it('day-by-day after a payout: the cycle start, then days', () => {
     render()
     toApproach()
     choose('dayByDay')
     press('Continue')
-    type(byLabel('Current balance'), '4758.34')
+    type(byLabel('Balance after your last payout'), '4758.34')
     press('Continue')
 
     expect(headline()).toBe('Log each trading day')
@@ -725,7 +725,7 @@ describe('walkthrough', () => {
     // No payouts taken, so neither card lists a balance: it follows from the
     // starting balance plus the profit since, whichever way that is given.
     expect(card('dayByDay')).toContain('Each day’s profit, positive or negative')
-    expect(card('dayByDay')).not.toContain('Current balance')
+    expect(card('dayByDay')).not.toContain('Balance after your last payout')
     expect(card('pointInTime')).toContain('Cumulative profit')
     expect(card('pointInTime')).not.toContain('Current balance')
     // A Growth minimum of five days tops the three that 35% takes, so it is
@@ -773,13 +773,14 @@ describe('walkthrough', () => {
     press('Continue')
 
     // Two payouts in, so the balance is back on the card.
-    expect(card('dayByDay')).toContain('Current balance')
+    expect(card('dayByDay')).toContain('Balance after your last payout')
 
     choose('dayByDay')
     press('Continue')
 
-    // Two payouts in, the logged days no longer add up to the balance.
-    expect(headline()).toBe('What’s your current balance?')
+    // Two payouts in, so where the cycle started has to be said outright;
+    // the logged days are added onto it from there.
+    expect(headline()).toBe('What did your last payout leave?')
     expect(text()).not.toContain('Have you taken a payout')
   })
 
@@ -968,7 +969,7 @@ describe('day-by-day dashboard', () => {
   it('locks the account settings until the lock is clicked', () => {
     render()
     const fields = [
-      'Current balance',
+      'Balance after your last payout',
       'Starting balance',
       'Balance for max payout',
       'Minimum payout',
@@ -1003,12 +1004,12 @@ describe('day-by-day dashboard', () => {
     render()
     click('Unlock account settings')
     type(byLabel('Consistency rule'), '20')
-    type(byLabel('Current balance'), '4200')
+    type(byLabel('Balance after your last payout'), '4200')
     press('Restore defaults')
 
     expect(byLabel('Consistency rule').value).toBe('50')
     // The balance is the trader's own number, not one of the firm's rules.
-    expect(byLabel('Current balance').value).toBe('4200')
+    expect(byLabel('Balance after your last payout').value).toBe('4200')
   })
 
   it('leaves logging days open while the account is locked', () => {
@@ -1070,9 +1071,10 @@ describe('day-by-day dashboard', () => {
     press('Continue')
 
     expect(headline()).toBe('Does this look correct?')
-    expect(text()).toContain('$4,758.34') // balance before
+    // The cycle started at $4,758.34 and the two logged days put $800 on it.
+    expect(text()).toContain('$5,558.34') // balance before
     expect(text()).toContain('−$2,000.00') // the payout
-    expect(text()).toContain('$2,758.34') // balance now
+    expect(text()).toContain('$3,558.34') // balance now
     expect(text()).toContain('Your 2 logged days will be cleared')
     press('Continue')
 
@@ -1081,10 +1083,10 @@ describe('day-by-day dashboard', () => {
     press('Start the next cycle')
 
     // Back on the dashboard, counting from the new balance with nothing
-    // logged: $4,100 - $2,758.34 over two days.
-    expect(headline()).toBe('Two more trading days at $670.83 each')
+    // logged: $4,100 - $3,558.34 = $541.66, over two days at half of it.
+    expect(headline()).toBe('Two more trading days at $270.83 each')
     expect(ledgerRows()).toHaveLength(0)
-    expect(byLabel('Current balance').value).toBe('2758.34')
+    expect(byLabel('Balance after your last payout').value).toBe('3558.34')
     expect(storedOpen().setup).toMatchObject({
       payoutsSoFar: 1,
       payoutTaken: true,
@@ -1111,7 +1113,7 @@ describe('day-by-day dashboard', () => {
     type(byLabel('Payout amount'), '1500')
     press('Continue')
     expect(headline()).toBe('Does this look correct?')
-    expect(text()).toContain('$3,258.34') // 4758.34 - 1500
+    expect(text()).toContain('$4,058.34') // 5558.34 - 1500
   })
 
   it('keeps the days logged since the payout', () => {
@@ -1131,7 +1133,7 @@ describe('day-by-day dashboard', () => {
     // The new cycle starts from the new balance, with that one day in it.
     expect(ledgerRows()).toHaveLength(1)
     expect(text()).toContain('+$250.00')
-    expect(byLabel('Current balance').value).toBe('2758.34')
+    expect(byLabel('Balance after your last payout').value).toBe('3558.34')
   })
 
   it('backs out of the payout flow without changing anything', () => {
@@ -1143,7 +1145,7 @@ describe('day-by-day dashboard', () => {
 
     expect(headline()).toBe('Payout ready')
     expect(ledgerRows()).toHaveLength(2)
-    expect(byLabel('Current balance').value).toBe('4758.34')
+    expect(byLabel('Balance after your last payout').value).toBe('4758.34')
   })
 
   it('shows no spreadsheet cell references or formulas', () => {
@@ -1239,7 +1241,7 @@ describe('several accounts', () => {
     expect(header()).toContain('Tradeify 50k Growth')
     expect(headline()).not.toBe('Payout ready')
     expect(ledgerRows()).toHaveLength(0)
-    expect(byLabel('Current balance').value).toBe('51420.75')
+    expect(byLabel('Balance after your last payout').value).toBe('51420.75')
   })
 
   it('keeps a payout to the account it was taken from', () => {
@@ -1255,7 +1257,7 @@ describe('several accounts', () => {
     const [after, other] = stored()
     expect(after.setup.payoutsSoFar).toBe(1)
     expect(after.days).toEqual([])
-    expect(after.rules.balance).toBe('2758.34')
+    expect(after.rules.balance).toBe('3558.34')
     // The other account is exactly as it was left.
     expect(other).toEqual(growth)
   })

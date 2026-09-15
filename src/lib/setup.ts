@@ -99,12 +99,26 @@ export type StepId =
   | 'days'
   | 'strategy'
 
-/** The balance hint, which depends on where the firm starts the account. */
-export function balanceHint(templateId: string): string {
+/**
+ * The balance hint, which depends on where the firm starts the account and on
+ * whether the ledger is going to carry it from here. Day by day the figure is
+ * where the cycle began, because every day logged after it is added on; a
+ * point-in-time account states today's balance instead.
+ */
+export function balanceHint(templateId: string, fromLedger = false): string {
   const template = accountTemplate(templateId)
+  const starts =
+    template.startingBalance > 0
+      ? ` It starts at $${template.startingBalance.toLocaleString('en-US')}.`
+      : ', which starts at $0.'
+  if (fromLedger) {
+    return template.startingBalance > 0
+      ? `What your last payout left in the account.${starts} The days you log are added onto it.`
+      : `Your profit left after your last payout${starts} The days you log are added onto it.`
+  }
   return template.startingBalance > 0
-    ? `Your account balance today. It starts at $${template.startingBalance.toLocaleString('en-US')}.`
-    : 'Your funded account balance, which starts at $0.'
+    ? `Your account balance today.${starts}`
+    : `Your funded account balance${starts}`
 }
 
 export function stepsFor(
@@ -241,10 +255,21 @@ export function deriveInputs(
     ? parseAmount(source.netProfit)
     : summary.netProfit
 
+  // Where the cycle began: the account's own starting balance, or what the
+  // last payout left behind.
+  const cycleStart = source.payoutTaken
+    ? parseAmount(source.balance)
+    : startingBalance
+
   return {
-    balance: source.payoutTaken
-      ? parseAmount(source.balance)
-      : startingBalance + currentNetProfit,
+    // A point-in-time account after a payout states its balance outright —
+    // there is no ledger to add up. Everywhere else the balance follows the
+    // profit, so logging a day moves it the way the account moves.
+    balance:
+      pointInTime && source.payoutTaken
+        ? parseAmount(source.balance)
+        // Keep cents clean, the way the ledger's own total is kept.
+        : Math.round((cycleStart + currentNetProfit) * 100) / 100,
     payoutThreshold: parseAmount(account.payoutThreshold),
     minimumPayout: parseAmount(account.minimumPayout),
     profitGoal: Math.max(0, parseAmount(account.profitGoal)),
