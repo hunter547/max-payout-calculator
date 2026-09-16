@@ -212,8 +212,17 @@ export function PnlChart({
           const daysAtMin = (target - standsAt) / perDay
           const daysAtMax = (target - standsAt) / cap
           const xAt = (days: number) => anchorX + slot * days
+          // Where the corridor begins. With days logged that is the climb's
+          // last point, which is a marker on the chart. With none it would be
+          // the notional day before the plan, which is not — so it starts at
+          // the first planned day instead, the same place the minimum's own
+          // line starts, and opens from that pair of markers rather than from
+          // a point off the left edge.
+          const from = lastRecorded < 0 ? 1 : 0
           return {
-            anchorX,
+            beginX: xAt(from),
+            minBegin: standsAt + perDay * from,
+            capBegin: standsAt + cap * from,
             slowX: xAt(daysAtMin),
             fastX: xAt(daysAtMax),
             // Where the cap pace stands on the plan's last day: above the
@@ -610,8 +619,11 @@ export function PnlChart({
             it the payout slips further out. */}
         {zone && (
           <>
+            {/* Up the left edge, along the cap, down the payout and back
+                along the minimum. With days logged the left edge is a point
+                and this is the wedge it has always been. */}
             <path
-              d={`M${zone.anchorX},${y(standsAt)} L${zone.fastX},${y(target)} L${zone.slowX},${y(target)} Z`}
+              d={`M${zone.beginX},${y(zone.minBegin)} L${zone.beginX},${y(zone.capBegin)} L${zone.fastX},${y(target)} L${zone.slowX},${y(target)} Z`}
               fill="url(#climb-zone)"
             />
             {/* The same zone above the payout, dimmed: profit the cap pace
@@ -625,12 +637,12 @@ export function PnlChart({
                 It keeps going past the payout, because at that pace the target
                 is passed rather than met. */}
             <line
-              x1={zone.anchorX} y1={y(standsAt)} x2={zone.slowX} y2={y(zone.overY)}
+              x1={zone.beginX} y1={y(zone.capBegin)} x2={zone.slowX} y2={y(zone.overY)}
               className="stroke-cap" strokeWidth={1.5} strokeDasharray="5 4"
               strokeOpacity={0.5}
             />
             <line
-              x1={zone.anchorX} y1={y(standsAt)} x2={zone.fastX} y2={y(target)}
+              x1={zone.beginX} y1={y(zone.capBegin)} x2={zone.fastX} y2={y(target)}
               className="stroke-cap" strokeWidth={1.5} strokeDasharray="5 4"
               strokeOpacity={0.95}
             />
