@@ -8,6 +8,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { paceAt } from '@/lib/calc'
 import {
   formatAxis,
   formatCurrency,
@@ -203,7 +204,9 @@ export function PnlChart({
   const zone =
     target > 0 && perDay > 0 && cap > perDay
       ? (() => {
-          const anchorX = x(Math.max(lastRecorded, 0))
+          // Not clamped to zero: with nothing logged the corridor starts from
+          // the notional day before the plan, which is where $0 sits.
+          const anchorX = x(lastRecorded)
           // Days each pace needs to reach the payout. The minimum takes the
           // longest, so it is the day the plan ends on.
           const daysAtMin = (target - standsAt) / perDay
@@ -221,7 +224,7 @@ export function PnlChart({
       : null
 
   /** Where the cap pace stands on day `i`, counting from the last logged day. */
-  const capAt = (i: number) => standsAt + cap * (i - Math.max(lastRecorded, 0))
+  const capAt = (i: number) => paceAt(standsAt, cap, i, lastRecorded)
 
   const { lo, hi, ticks } = niceScale(
     Math.min(0, ...nets),

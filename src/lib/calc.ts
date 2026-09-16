@@ -417,6 +417,25 @@ export interface PlanDay {
 }
 
 /** The day-by-day schedule for a plan: `days` equal days of `dailyProfit`. */
+/**
+ * Where a steady pace stands on a given day of the chart.
+ *
+ * `lastLogged` is the index of the last day already logged, and −1 when none
+ * have been: the pace then runs from the notional day before the first planned
+ * one, so day one of the plan is worth a day's profit rather than none. Getting
+ * that wrong puts the cap a day behind the minimum, and on a fresh account the
+ * corridor comes out upside down — the minimum drawn above the cap it is
+ * supposed to sit under.
+ */
+export function paceAt(
+  standsAt: number,
+  perDay: number,
+  day: number,
+  lastLogged: number,
+): number {
+  return standsAt + perDay * (day - lastLogged)
+}
+
 export function buildPlan(
   inputs: CalcInputs,
   plan: Pick<Plan, 'days' | 'dailyProfit'>,

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  MAX_PLAN_DAYS,
   buildPlan,
   calculate,
   curatedPlan,
   fastestDays,
-  MAX_PLAN_DAYS,
+  paceAt,
   planFor,
   type CalcInputs,
 } from './calc'
@@ -626,5 +627,28 @@ describe('buildPlan', () => {
     const inputs = { ...SHEET_INPUTS, currentNetProfit: 5000 }
     const results = calculate(inputs)
     expect(buildPlan(inputs, planFor(inputs, results, 'aggressive'))).toHaveLength(0)
+  })
+})
+
+describe('paceAt', () => {
+  it('carries a pace on from the last logged day', () => {
+    // Four days logged ending at $2,080, then $2,550 a day at the cap.
+    expect(paceAt(2080, 2550, 4, 3)).toBe(4630)
+    expect(paceAt(2080, 2550, 5, 3)).toBe(7180)
+  })
+
+  it('gives the first planned day a full day of profit on a fresh account', () => {
+    // Nothing logged, so the pace starts from the day before the plan begins.
+    expect(paceAt(0, 1575, 0, -1)).toBe(1575)
+    expect(paceAt(0, 900, 0, -1)).toBe(900)
+  })
+
+  it('keeps the cap above the minimum from the very first planned day', () => {
+    // The corridor on a fresh Tradeify 100k Growth: $900 a day to reach the
+    // payout in five, $1,575 the most a day may make. The cap has to be the
+    // upper edge on every day of the plan, including the first.
+    for (let day = 0; day < 5; day++) {
+      expect(paceAt(0, 1575, day, -1)).toBeGreaterThan(paceAt(0, 900, day, -1))
+    }
   })
 })
