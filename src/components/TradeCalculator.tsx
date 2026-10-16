@@ -167,12 +167,15 @@ function CalculatorBody({
   // The fee check confirms these daily; an old date means it has been failing.
   const stale = fees ? isStale(fees.checked, todayISO()) : false
 
+  // Both menus stay modal. Their lists render outside the dialog, and the
+  // dialog blocks scrolling outside itself, so a non-modal list cannot be
+  // scrolled by touch or wheel; a modal menu takes the scroll lock over.
   return (
     <div className="grid gap-5">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid content-start gap-1.5">
           <Label id="calc-firm-label">Prop firm</Label>
-          <DropdownMenu modal={false}>
+          <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
@@ -201,7 +204,7 @@ function CalculatorBody({
 
         <div className="grid content-start gap-1.5">
           <Label id="calc-contract-label">Contract</Label>
-          <DropdownMenu modal={false}>
+          <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
