@@ -3,8 +3,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
-/** A dollar prefix, or a percent, days or payouts suffix. */
-export type FieldUnit = '$' | '%' | 'days' | 'payouts'
+/** A dollar prefix, or a percent, days, payouts, contracts or ticks suffix. */
+export type FieldUnit = '$' | '%' | 'days' | 'payouts' | 'contracts' | 'ticks'
 
 interface MoneyFieldProps {
   id: string
@@ -85,6 +85,8 @@ export function MoneyField({
             unit === '%' && (lg ? 'pr-12' : 'pr-8'),
             unit === 'days' && (lg ? 'pr-20' : 'pr-14'),
             unit === 'payouts' && (lg ? 'pr-28' : 'pr-20'),
+            unit === 'contracts' && (lg ? 'pr-32' : 'pr-24'),
+            unit === 'ticks' && (lg ? 'pr-20' : 'pr-14'),
           )}
         />
       </div>

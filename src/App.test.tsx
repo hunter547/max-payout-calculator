@@ -1500,3 +1500,100 @@ describe('point-in-time dashboard', () => {
   })
 
 })
+
+describe('ticks to target', () => {
+  beforeEach(seedDashboard)
+
+  // The menus inside it are tested in TradeCalculator.test.tsx: a Radix menu
+  // opened inside the whole app costs jsdom seconds a time.
+
+  /** The calculator renders in a portal, outside the app's container. */
+  const dialog = () => document.body.querySelector<HTMLElement>('[role="dialog"]')
+  const dialogText = () => dialog()?.textContent ?? ''
+
+  function inDialog(buttonText: string): HTMLButtonElement {
+    const button = Array.from(dialog()!.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim().startsWith(buttonText),
+    )
+    if (!button) throw new Error(`No button reading "${buttonText}"`)
+    return button
+  }
+
+  function field(id: string): HTMLInputElement {
+    return document.getElementById(id) as HTMLInputElement
+  }
+
+  /** The default account's history: a $355.70 day to $359 cap corridor. */
+  function withCorridor() {
+    render()
+    addDay('2026-09-08', '359')
+    addDay('2026-09-09', '-212.40')
+    addDay('2026-09-10', '-140')
+    expect(headline()).toBe('Two more trading days at $355.70 each')
+  }
+
+  it('opens on the account’s firm and aims at the corridor’s minimum', () => {
+    withCorridor()
+    press('Ticks to target')
+
+    expect(dialogText()).toContain('MyFundedFutures')
+    expect(inDialog('Minimum').textContent).toBe('Minimum $355.70')
+    expect(inDialog('Cap').textContent).toBe('Cap $359.00')
+    // ES at MyFundedFutures' $4.68 and a tick of slippage: 355.70 / 12.50 +
+    // 4.68 / 12.50 + 1 = 29.83, so 30 ticks — 7.50 points.
+    expect(dialogText()).toContain('30 ticks')
+    expect(dialogText()).toContain('7.50 points')
+    expect(dialogText()).toContain('$357.82')
+    expect(dialogText()).toContain('Rounded up')
+  })
+
+  it('opens from the header too', () => {
+    withCorridor()
+    click('Ticks to target')
+    expect(dialog()).not.toBeNull()
+  })
+
+  it('rounds the cap down, so the day stays under it', () => {
+    withCorridor()
+    press('Ticks to target')
+    type(field('calc-quantity'), '2')
+    act(() => inDialog('Cap').click())
+
+    // 359 / (2 × 12.50) + 4.68 / 12.50 + 1 = 15.73, so 15: it nets $340.64,
+    // and a 16th tick would net $365.64, over the cap.
+    expect(dialogText()).toContain('15 ticks')
+    expect(dialogText()).toContain('$340.64')
+    expect(dialogText()).toContain('one more would net $365.64')
+  })
+
+  it('remembers the account’s numbers', () => {
+    withCorridor()
+    press('Ticks to target')
+    type(field('calc-quantity'), '2')
+    type(field('calc-slippage'), '2')
+    act(() => {
+      dialog()!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      )
+    })
+    expect(dialog()).toBeNull()
+
+    expect(storedOpen()?.trade).toEqual({ quantity: '2', slippage: '2' })
+    press('Ticks to target')
+    expect(field('calc-quantity').value).toBe('2')
+    expect(field('calc-slippage').value).toBe('2')
+  })
+
+  it('offers only a custom amount when there is no corridor', () => {
+    // No days: the $500 floor over two days of $250, and a $250 cap — the
+    // corridor has no width.
+    render()
+    press('Ticks to target')
+
+    expect(() => inDialog('Minimum')).toThrow()
+    expect(dialogText()).toContain('no plan to trade to')
+    type(field('calc-custom'), '100')
+    // 100 / 12.50 + 4.68 / 12.50 + 1 = 9.37, so 10.
+    expect(dialogText()).toContain('10 ticks')
+  })
+})

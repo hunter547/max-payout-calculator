@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeftRight, Moon, PartyPopper, Sun } from 'lucide-react'
+import { ArrowLeftRight, Calculator, Moon, PartyPopper, Sun } from 'lucide-react'
 import { AccountPanel, type BalanceDisplay } from '@/components/AccountPanel'
 import { AccountSwitcher } from '@/components/AccountSwitcher'
 import { CuratedControls } from '@/components/CuratedControls'
@@ -9,6 +9,7 @@ import { PnlChart, type ChartBar } from '@/components/PnlChart'
 import { SnapshotPanel } from '@/components/SnapshotPanel'
 import { TargetBreakdown } from '@/components/TargetBreakdown'
 import { ThemePicker } from '@/components/ThemePicker'
+import { TradeCalculator, type Corridor } from '@/components/TradeCalculator'
 import { Walkthrough, type WalkthroughResult } from '@/components/Walkthrough'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -71,6 +72,7 @@ import {
   nextCurrent,
   SNAPSHOT_DEFAULTS,
   type Account,
+  type TradePrefs,
 } from '@/lib/portfolio'
 import {
   CURATED_DEFAULT,
@@ -298,6 +300,7 @@ export default function App() {
   const [reconfiguring, setReconfiguring] = useState(false)
   const [adding, setAdding] = useState(false)
   const [takingPayout, setTakingPayout] = useState(false)
+  const [calculating, setCalculating] = useState(false)
   // The account picked in the walkthrough, before anything is saved, and the
   // theme that was showing before it moved.
   const [draftTemplate, setDraftTemplate] = useState<string | null>(null)
@@ -337,6 +340,8 @@ export default function App() {
       ...a,
       days: typeof next === 'function' ? next(a.days) : next,
     }))
+  const setTrade = (change: TradePrefs) =>
+    patch((a) => ({ ...a, trade: { ...a.trade, ...change } }))
 
   // Older saves predate some fields; fill the gaps rather than read undefined.
   const snapshot = useMemo<Snapshot>(
@@ -682,6 +687,13 @@ export default function App() {
   // Past the firm's last payout there is nothing to plan for, so the plan
   // itself comes off the page along with the target it was aiming at.
   const spent = payoutsSpent(schedule, payoutsSoFar)
+  // The chart's corridor, exactly as it draws it: the plan's day and the cap
+  // over it. Without planned days there is nothing between them to aim for.
+  const corridor: Corridor | null =
+    !spent && !consistencyInvalid && plan && plan.days > 0 &&
+    plan.dailyCap > plan.dailyProfit
+      ? { low: plan.dailyProfit, high: plan.dailyCap }
+      : null
 
   const { title, detail } = verdict(
     results,
@@ -764,6 +776,22 @@ export default function App() {
             />
           }
         >
+          {/* From tablets up: on a phone the header has no room for it, and
+              the same button sits under the headline. */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="hidden sm:inline-flex"
+                aria-label="Ticks to target"
+                onClick={() => setCalculating(true)}
+              >
+                <Calculator />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Ticks to target</TooltipContent>
+          </Tooltip>
           {/* Icon-only on phones so the app name keeps its two lines. */}
           <Button
             variant="ghost"
@@ -774,6 +802,15 @@ export default function App() {
             <span className="sr-only sm:not-sr-only">Change approach</span>
           </Button>
         </AppHeader>
+
+        <TradeCalculator
+          open={calculating}
+          onOpenChange={setCalculating}
+          firmId={firmOf(template).id}
+          corridor={corridor}
+          prefs={openAccount?.trade ?? {}}
+          onPrefsChange={setTrade}
+        />
 
         <main>
           <section aria-labelledby="verdict" className="pt-8 sm:pt-14">
@@ -826,6 +863,16 @@ export default function App() {
                       </ToggleGroupItem>
                     ))}
                   </ToggleGroup>
+                  {/* Beside the plan, since its corridor is what it reads. */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="sm:ml-auto"
+                    onClick={() => setCalculating(true)}
+                  >
+                    <Calculator />
+                    Ticks to target
+                  </Button>
                 </div>
 
                 {strategy === 'curated' &&
@@ -846,6 +893,20 @@ export default function App() {
                     />
                   )}
               </>
+            )}
+
+            {/* With the payouts used up there is no plan row to sit in, but
+                a trade still has a size and a fee. */}
+            {spent && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-6"
+                onClick={() => setCalculating(true)}
+              >
+                <Calculator />
+                Ticks to target
+              </Button>
             )}
 
             {!spent && (

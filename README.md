@@ -24,6 +24,7 @@ npm run dev      # http://localhost:5173
 npm run build    # typecheck + production bundle
 npm run lint
 npm test         # calculation parity, ledger, setup, and UI tests
+npm run check-fees   # the firms' fee pages against the registry (see below)
 ```
 
 ## First visit: the walkthrough
@@ -163,7 +164,8 @@ Three numbers drive everything, and each comes from one of two places:
 | Trading days | entered | logged days that clear the firm's profit bar |
 
 Everything is saved in your browser's `localStorage` — `mpc.accounts` holds
-every account (its setup, rules, numbers and logged days), `mpc.current` says
+every account (its setup, rules, numbers, logged days and ticks calculator
+settings), `mpc.current` says
 which one is open, and `mpc.theme` and `mpc.brand` are the appearance. Nothing
 is sent anywhere.
 
@@ -217,6 +219,127 @@ than the balance has above its floor.
 The confetti is [canvas-confetti](https://www.npmjs.com/package/canvas-confetti)
 in the theme's own colors, imported on demand so it stays out of the main
 bundle, and skipped for anyone whose system asks for reduced motion.
+
+## Ticks to target
+
+The plan says how much a day has to make; this says what that is in a trade.
+**Ticks to target** — a calculator icon in the header from tablet width up, and
+a button beside the **Plan** toggle — opens a modal that works out how far a
+trade has to run to make an amount once the firm's fees and the trader's
+slippage are paid ([`TradeCalculator.tsx`](src/components/TradeCalculator.tsx)).
+
+It starts on the open account's firm, and asks for:
+
+- **The firm**, and where it prices them differently, **the platform** — only
+  Apex does, with a schedule each for Rithmic, Tradovate and WealthCharts.
+- **The contract**, from what that firm lets you trade, grouped by sector with
+  each one's round-trip fee. A product the firm has stopped for now is listed
+  but cannot be picked, with the firm's reason.
+- **Quantity** and **slippage**. Slippage is the total ticks lost per contract
+  across the entry and the exit together, 1 by default: 1 for one tick in all,
+  2 for a tick on each side.
+- **The amount**: the consistency corridor's **minimum** (the plan's daily
+  profit) or its **cap** (the daily cap), exactly as the chart draws them, or a
+  custom figure. With no corridor — nothing left to plan, or a cap no wider
+  than the day — only custom is offered.
+
+For `n` contracts of tick value `v`, a round-trip fee `f` and `s` ticks of
+slippage, a trade that runs `t` ticks nets `n·((t − s)·v − f)`, so the ticks
+needed are
+
+```
+t = amount / (n·v) + f / v + s
+```
+
+([`src/lib/ticks.ts`](src/lib/ticks.ts)). A trade moves in whole ticks, and
+which way `t` rounds depends on the amount. The minimum and a custom amount
+round **up**, or the trade stops short. The cap rounds **down**: a tick past it
+raises the payout target, which is the one thing the cap is there to prevent —
+the modal says what one tick more would have netted. The answer comes as ticks,
+the same move as the contract's price scale writes it ("2.50 points" on ES,
+"1.50 cents" on corn, "4.5/32" on ZN), and gross, fees, slippage and net.
+
+Each account remembers its platform, contract, quantity and slippage. Looking
+at another firm in the modal changes nothing saved.
+
+### Contracts and fees
+
+[`src/lib/contracts.ts`](src/lib/contracts.ts) keeps two registries, because the
+two halves come from different places:
+
+| Registry | What it carries | Source |
+|----------|-----------------|--------|
+| `CONTRACTS` | symbol, sector, tick size and tick value, and how the price is quoted | CME Group's contract specification pages |
+| `FIRM_CONTRACTS` | which contracts a firm allows, its fee per contract by platform, what it has restricted, and the pages it was read from | the firm's own help center |
+
+Tick specs come from CME rather than the firms because the firms' copies are
+not reliable: MyFundedFutures gives Natural Gas the $2.50 tick of an
+intercommodity spread rather than the outright's $10.00, and Platinum a $10.00
+tick CME prices at $5.00. Ticks are the outright's; CME pages also list finer
+ticks for spreads, BTIC and TAS that an outright position never moves by.
+
+| Firm | Fee page | As printed | Platforms | ES / MES round trip |
+|------|----------|------------|-----------|---------------------|
+| MyFundedFutures | [Futures Instrument List](https://help.myfundedfutures.com/en/articles/9735811-futures-instrument-list) | round trip | one schedule | $4.68 / $1.90 |
+| Tradeify | [Trading Commission Fees](https://help.tradeify.co/en/articles/10468315-trading-commission-fees) | round trip, all-in | one schedule | $5.76 / $1.82 |
+| Topstep | [TopstepX — Commissions and Fees](https://help.topstep.com/en/articles/8284213-topstepx-commissions-and-fees) | round turn, all-in | TopstepX only | $3.78 / $1.22 |
+| Lucid Trading | [Approved Products and Commissions](https://support.lucidtrading.com/en/articles/11508978-approved-products-and-commissions) | **per side** | one schedule | $3.50 / $1.00 |
+| Apex Trader Funding | one page per platform, e.g. [Rithmic](https://apextraderfunding.com/help-center/rithmic/rithmic-commissions-instruments/) | per side and round turn | Rithmic, Tradovate, WealthCharts | $3.98 / $1.02 (Rithmic) |
+
+What the tables do not carry, and why:
+
+- **Where a firm's pages disagree, the fee page wins.** Tradeify's newer
+  Pricing Reference gives CL $5.66, which is EMD's fee to the cent; its
+  commission article gives $6.00, and the app uses that.
+- **Printed but not priced is left out**, not guessed: Tradeify's NKD, PL and
+  PA, Apex's RB and HO on Tradovate, and Japanese Yen on WealthCharts.
+- **Printed as published even where it looks wrong**: Apex prices Micro Silver
+  on WealthCharts at the full-size contract's $3.54.
+- **Restricted for now**: Topstep caps SI, HG and PL at 0 contracts, and
+  MyFundedFutures has stopped SI, HG, PL, NG and QG, both for volatility.
+- **EUREX is left out.** Tradeify and Apex offer it only on Tradovate with a
+  paid add-on, priced in euros.
+
+Topstep and Apex both say outright that profit is counted net of fees; the
+others do not say either way, and the calculator charges fees regardless.
+
+### Keeping the fees current
+
+Firms reprice without notice, so a workflow
+([`.github/workflows/check-fees.yml`](.github/workflows/check-fees.yml)) reads
+every page in `FIRM_CONTRACTS` once a day with
+[`tools/fee-check`](tools/fee-check) and holds it against the registry: every
+fee to the cent, every contract priced (and, for Tradeify, supported), and the
+restrictions MyFundedFutures and Topstep publish.
+
+- **A firm that matches has its date moved forward.** The dates live in
+  [`src/lib/fees-checked.json`](src/lib/fees-checked.json), apart from the
+  fees, so the workflow's commit touches nothing else; it is the "checked"
+  date the calculator shows, and the commit redeploys the site with it.
+- **Anything else opens an issue** labelled `fee-check` — a fee that moved, a
+  contract added or dropped, a restriction imposed or lifted, or a page that
+  no longer reads as a fee table — and the firm's date stays put. Nothing
+  edits a fee on its own: a person checks the page, corrects
+  `contracts.ts`, and runs `npm run check-fees` to confirm it and move the
+  date. The issue is commented on only when there is something new, and
+  closed once there is nothing left to raise.
+- **Tradeify and Apex turn the workflow away.** Both sit behind Cloudflare,
+  which refuses plain requests and headless browsers, and the check does not
+  disguise itself to get past it. A page that will not load is raised only
+  once the firm's date is two weeks old; until then, check those two from
+  your own machine:
+
+  ```bash
+  npm run check-fees -- --browser   # opens the pages in a visible Edge or Chrome
+  ```
+
+  and commit the dates it moves.
+- **Past two weeks, the calculator says so.** A firm whose date is more than
+  `STALE_AFTER_DAYS` (14) old gets a warning in place of "checked", pointing at
+  the pages to check by hand.
+
+Scheduled workflows run from the default branch only, and GitHub pauses them
+in a repository with no activity for 60 days.
 
 ## Account templates
 
@@ -670,8 +793,9 @@ included. Each has a test on it:
 ## UI components
 
 Built on [shadcn/ui](https://ui.shadcn.com) (new-york style, Tailwind v4):
-`alert`, `badge`, `button`, `input`, `label`, `progress`, `radio-group`,
-`separator`, `switch`, `table`, and `tooltip`, in `src/components/ui/`. The P&L
+`alert`, `badge`, `button`, `dialog`, `dropdown-menu`, `input`, `label`,
+`progress`, `radio-group`, `separator`, `switch`, `table`, `toggle`,
+`toggle-group`, and `tooltip`, in `src/components/ui/`. The P&L
 chart is hand-built SVG in `src/components/PnlChart.tsx`.
 
 To add another component:
@@ -702,6 +826,24 @@ in `src/lib/utils.ts`. If the CLI installs `cn` into `package.json`, remove it.
   Minimum trading days are covered too: plans stretch to the firm's minimum,
   every planned day clears the profit bar that makes it count, and a cap under
   that bar is turned down.
+- `src/lib/ticks.test.ts`: the ticks a trade needs, rounded up to reach an
+  amount and down to stay under a cap, fees and slippage charged per contract,
+  floating-point dust that would cost or waste a tick, and a sweep confirming
+  every answer is the fewest ticks that reach, or the most that stay under.
+- `src/lib/contracts.test.ts`: every firm's fee table against the one its page
+  printed, extracted from the page text by script rather than retyped; every
+  contract's tick against CME's; per-side fees doubled; fees by platform; and
+  restricted products listed but marked.
+- `src/components/TradeCalculator.test.tsx`: the modal's menus — contracts by
+  sector with restricted ones disabled, another firm not saved to the account —
+  kept apart from `App.test.tsx`, where a Radix menu costs jsdom seconds each;
+  and the warning once a firm's fees go two weeks unconfirmed.
+- `tools/fee-check/fee-check.test.ts`: each firm's page layout read into fees
+  (round trip or per side, euro and unpriced rows skipped, symbols from product
+  names) and restrictions; a reader for every source page; every firm
+  confirmed against pages that match it; fee changes, contracts added and
+  dropped, restrictions moved, and a page that will not read or load, each
+  reported; and the issue text the same from one day to the next.
 - `src/lib/ledger.test.ts`: largest day and net profit from daily entries,
   which days clear a firm's profit bar (and that one exactly level with it does
   not), pasted formatting like `$1,200`, and weekend-aware plan dates.
@@ -725,8 +867,9 @@ in `src/lib/utils.ts`. If the CLI installs `cn` into `package.json`, remove it.
   payout, the warning a cut buffer earns, and an account bought before the
   cutoff) and its absence on a flat schedule,
   the no-payout path's derived balance, validation, reopening and cancelling,
-  and both dashboards' editing, removing, invalid input, eligibility, and
-  payout-ready states.
+  both dashboards' editing, removing, invalid input, eligibility, and
+  payout-ready states, and the ticks calculator opening on the corridor's
+  minimum, rounding the cap down, and remembering an account's numbers.
 
 ## Color themes
 

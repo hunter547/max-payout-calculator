@@ -164,6 +164,25 @@ $150" and "$100 or more" are different rules and the app models both.
 **Only accounts with a consistency rule or a payout schedule belong in the
 app.** LucidFlex and LucidDaily were left out for having neither.
 
+Then the firm's **contracts and fees**, for the ticks calculator: the article
+that lists what it lets you trade and what one contract costs. Note whether the
+fee is per side or round trip (Lucid prints per side, the rest the round trip),
+whether it changes by platform (Apex has a page for each of Rithmic, Tradovate
+and WealthCharts), which products are restricted for now, and where two of the
+firm's pages disagree on a fee. Extract the table from the page text by script
+— it becomes the test's `PUBLISHED` table, so a slip in the registry fails
+rather than being typed twice. Tick specs come from CME's own contract pages,
+not the firm's: MyFundedFutures' table gives Natural Gas its spread tick.
+
+Every page in the firm's `sources` also needs an entry in `READERS`
+(`tools/fee-check/readers.ts`), the daily fee check's reader for it — the
+header-driven `feeTable` covers any fee table with a symbol and a fee column,
+and restrictions want a reader of their own — and the firm needs a date in
+`src/lib/fees-checked.json`. Run `npm run check-fees` (with `-- --browser` if
+the site turns plain requests away) and see the firm come back confirmed
+before you are done: a reader that misreads the page will raise an issue
+every day.
+
 ## 4. Fit it to the model, and extend the model if it does not fit
 
 The registry is three layers in `src/lib/accounts.ts`: `FIRMS` →
@@ -265,6 +284,10 @@ src/assets/brands/firm.svg         lockup
 src/assets/brands/firm-icon.svg    square mark
 src/lib/accounts.ts                FIRMS, ACCOUNT_PROGRAMS, ACCOUNT_TEMPLATES
 src/lib/accounts.test.ts           the firm's published tables
+src/lib/contracts.ts               FIRM_CONTRACTS, and CONTRACTS for new symbols
+src/lib/contracts.test.ts          its published fee table, CME ticks
+src/lib/fees-checked.json          its confirmed date
+tools/fee-check/readers.ts         a reader for each of its fee pages
 public/og-image.png                the card, regenerated from tools/og-card/
 README.md                          account rows, theme row, new rule shapes
 ```

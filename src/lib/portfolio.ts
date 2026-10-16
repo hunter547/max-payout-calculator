@@ -31,6 +31,19 @@ export interface Account {
    * before that changed, which `loadAccounts` converts once.
    */
   balanceBasis?: 'cycleStart'
+  /** What the ticks calculator was last set to on this account's own firm. */
+  trade?: TradePrefs
+}
+
+/**
+ * Kept per account because each account is on one platform and usually one
+ * market; numbers are kept as typed, the way the rules and snapshot are.
+ */
+export interface TradePrefs {
+  platform?: string
+  symbol?: string
+  quantity?: string
+  slippage?: string
 }
 
 export const SNAPSHOT_DEFAULTS: Snapshot = {

@@ -1,0 +1,78 @@
+# Reads every firm's fee pages against src/lib/contracts.ts once a day.
+#
+# A firm whose pages still match to the cent has its date in
+# src/lib/fees-checked.json moved forward, which is the "checked" date the
+# calculator shows; that commit redeploys the site. Anything else opens an
+# issue labelled fee-check (or comments on the open one, when there is
+# something new to say), and the firm's date stays put until a person has
+# fixed the registry. Nothing here edits a fee. See tools/fee-check.
+name: Check fees
+
+on:
+  schedule:
+    # 11:17 UTC, before the US session opens, off the top of the hour that
+    # every other scheduled workflow piles onto.
+    - cron: '17 11 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: check-fees
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Read the firms' pages
+        run: >
+          npm run check-fees --
+          --report "$RUNNER_TEMP/report.md"
+          --message "$RUNNER_TEMP/message.txt"
+
+      - name: Commit the dates it confirmed
+        run: |
+          [ -f "$RUNNER_TEMP/message.txt" ] || exit 0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/lib/fees-checked.json
+          git commit --file "$RUNNER_TEMP/message.txt"
+          git pull --rebase
+          git push
+
+      - name: Raise what needs a person
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          report="$RUNNER_TEMP/report.md"
+          open=$(gh issue list --label fee-check --state open --json number --jq '.[0].number // empty')
+          if [ -s "$report" ]; then
+            gh label create fee-check --force --color d93f0b \
+              --description 'Raised by the daily fee check'
+            if [ -z "$open" ]; then
+              gh issue create --title 'Fees need checking' --label fee-check --body-file "$report"
+            else
+              # The report carries no relative dates, so the same findings
+              # read the same; only something new earns a comment.
+              last=$(gh issue view "$open" --json body,comments \
+                --jq 'if (.comments | length) > 0 then .comments[-1].body else .body end' | tr -d '\r')
+              if [ "$last" != "$(tr -d '\r' < "$report")" ]; then
+                gh issue comment "$open" --body-file "$report"
+              fi
+            fi
+          elif [ -n "$open" ]; then
+            gh issue close "$open" --comment 'The fee check has nothing left to raise.'
+          fi
