@@ -9,6 +9,7 @@ import {
 import { summarize } from './ledger'
 import {
   balanceHint,
+  curatedNow,
   deriveInputs,
   hasTakenPayout,
   impliedTradingDays,
@@ -429,6 +430,28 @@ describe('toCuratedChoice', () => {
       mode: 'cap',
       cap: 700,
     })
+  })
+})
+
+describe('curatedNow', () => {
+  const seven = { mode: 'days', days: 7, cap: '', daysFrom: 2 } as const
+
+  it('takes the counted days logged since the pick off it', () => {
+    expect(curatedNow(seven, 2).days).toBe(7)
+    expect(curatedNow(seven, 3).days).toBe(6)
+    expect(curatedNow(seven, 5).days).toBe(4)
+  })
+
+  it('never runs below one day, nor above the pick', () => {
+    expect(curatedNow(seven, 20).days).toBe(1)
+    expect(curatedNow(seven, 0).days).toBe(7)
+  })
+
+  it('leaves a cap, and a pick with no starting point, as typed', () => {
+    const cap = { mode: 'cap', days: 7, cap: '400', daysFrom: 0 } as const
+    expect(curatedNow(cap, 5)).toBe(cap)
+    const legacy = { mode: 'days', days: 7, cap: '' } as const
+    expect(curatedNow(legacy, 5)).toBe(legacy)
   })
 })
 

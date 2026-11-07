@@ -966,6 +966,77 @@ describe('day-by-day dashboard', () => {
     expect(text()).toContain('1 of 5')
   })
 
+  it('curated by days: a day over the bar comes off the count', () => {
+    seed({
+      'mpc.setup': {
+        templateId: 'tradeify-50k-growth',
+        approach: 'dayByDay',
+        payoutTaken: true,
+        payoutsSoFar: 1,
+        strategy: 'curated',
+        curated: { mode: 'days', days: 7, cap: '', daysFrom: 0 },
+      },
+      'mpc.rules': {
+        balance: '50000',
+        startingBalance: '50000',
+        payoutThreshold: '53000',
+        minimumPayout: '500',
+        consistency: '35',
+        minTradingDays: '5',
+        qualifyingDayProfit: '150',
+      },
+    })
+    render()
+    const picked = () =>
+      container
+        .querySelector(
+          '[aria-labelledby="dashboard-curated-days-label"] [data-state="on"]',
+        )
+        ?.textContent
+    expect(headline()).toMatch(/^Seven more trading days/)
+
+    // Under Tradeify's bar the day brings the payout no closer.
+    addDay('2026-09-08', '100')
+    expect(headline()).toMatch(/^Seven more trading days/)
+
+    addDay('2026-09-09', '400')
+    expect(headline()).toMatch(/^Six more trading days/)
+    expect(picked()).toBe('6')
+
+    // A day taken back puts its count back.
+    click('Remove Sep 9')
+    expect(headline()).toMatch(/^Seven more trading days/)
+  })
+
+  it('curated by days: a count saved without its starting point counts from the next day', () => {
+    seed({
+      'mpc.setup': {
+        templateId: 'tradeify-50k-growth',
+        approach: 'dayByDay',
+        payoutTaken: true,
+        payoutsSoFar: 1,
+        strategy: 'curated',
+        curated: { mode: 'days', days: 7, cap: '' },
+      },
+      'mpc.rules': {
+        balance: '50000',
+        startingBalance: '50000',
+        payoutThreshold: '53000',
+        minimumPayout: '500',
+        consistency: '35',
+        minTradingDays: '5',
+        qualifyingDayProfit: '150',
+      },
+      'mpc.days': [{ id: 'a', date: '2026-09-07', amount: '300' }],
+    })
+    render()
+    expect(headline()).toMatch(/^Seven more trading days/)
+
+    addDay('2026-09-08', '400')
+    expect(headline()).toMatch(/^Six more trading days/)
+    expect(storedOpen().setup.curated?.daysFrom).toBe(1)
+  })
+
   it('locks the account settings until the lock is clicked', () => {
     render()
     const fields = [

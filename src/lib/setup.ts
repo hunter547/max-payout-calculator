@@ -29,6 +29,12 @@ export interface CuratedDraft {
   mode: 'days' | 'cap'
   days: number | null
   cap: string
+  /**
+   * The counted days already logged when `days` was picked. Days counted
+   * since come off the pick, so seven days with one logged is six to go.
+   * Missing on plans saved before it was kept.
+   */
+  daysFrom?: number
 }
 
 export const CURATED_DEFAULT: CuratedDraft = { mode: 'days', days: null, cap: '' }
@@ -304,6 +310,28 @@ export function deriveInputs(
       parseAmount(account.qualifyingDayProfit),
     ),
   }
+}
+
+/**
+ * The logged days that move a plan along: where a firm sets a profit bar, only
+ * the days over it, since a day under it brings the payout no closer.
+ */
+export function countedDays(inputs: CalcInputs): number {
+  return inputs.qualifyingDaysSoFar ?? inputs.tradingDaysSoFar
+}
+
+/**
+ * A curated day count as it stands today: the pick less the counted days
+ * logged since it was made. It never drops below one, so a plan run out
+ * without a payout still has a next day; the calculator raises it to the
+ * fewest days possible from there. A day deleted takes its count back.
+ */
+export function curatedNow(draft: CuratedDraft, counted: number): CuratedDraft {
+  if (draft.mode !== 'days' || !draft.days || draft.daysFrom === undefined) {
+    return draft
+  }
+  const since = Math.max(0, counted - draft.daysFrom)
+  return { ...draft, days: Math.max(1, draft.days - since) }
 }
 
 /** The typed curated plan as a calculator choice, or null if incomplete. */

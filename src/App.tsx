@@ -75,7 +75,9 @@ import {
   type TradePrefs,
 } from '@/lib/portfolio'
 import {
+  countedDays,
   CURATED_DEFAULT,
+  curatedNow,
   deriveInputs,
   resolvePlan,
   termsOf,
@@ -316,6 +318,22 @@ export default function App() {
       list.map((a) => (a.id === openAccount?.id ? change(a) : a)),
     )
   }
+  /**
+   * A day count saved before picks kept their starting point gets one now,
+   * ahead of the first day logged against it, so that day counts off it.
+   */
+  const anchored = (a: Account): Account =>
+    a.setup?.curated?.mode === 'days' &&
+    a.setup.curated.days &&
+    a.setup.curated.daysFrom === undefined
+      ? {
+          ...a,
+          setup: {
+            ...a.setup,
+            curated: { ...a.setup.curated, daysFrom: counted },
+          },
+        }
+      : a
   const setSetup = (next: Setup | ((prev: Setup) => Setup)) =>
     patch((a) => ({
       ...a,
@@ -332,12 +350,12 @@ export default function App() {
     }))
   const setSnapshot = (next: Snapshot | ((prev: Snapshot) => Snapshot)) =>
     patch((a) => ({
-      ...a,
+      ...anchored(a),
       snapshot: typeof next === 'function' ? next(a.snapshot) : next,
     }))
   const setDays = (next: DayEntry[] | ((prev: DayEntry[]) => DayEntry[])) =>
     patch((a) => ({
-      ...a,
+      ...anchored(a),
       days: typeof next === 'function' ? next(a.days) : next,
     }))
   const setTrade = (change: TradePrefs) =>
@@ -370,7 +388,8 @@ export default function App() {
     ? payoutsSoFar > 0
     : setup?.payoutTaken === true
   const strategy: Strategy = setup?.strategy ?? 'conservative'
-  const curated = setup?.curated ?? CURATED_DEFAULT
+  // As saved: the day count picked and the counted days logged at the time.
+  const savedCurated = setup?.curated ?? CURATED_DEFAULT
   // The balance is only typed once a payout has been taken; before that it
   // follows from where the account started plus the profit since.
   const balanceEntered = payoutTaken
@@ -406,6 +425,13 @@ export default function App() {
         },
       ),
     [approach, payoutTaken, account, snapshot, summary, template],
+  )
+  const counted = countedDays(inputs)
+  // The pick less the counted days logged since, which is what every reader
+  // of the plan wants.
+  const curated = useMemo(
+    () => curatedNow(savedCurated, counted),
+    [savedCurated, counted],
   )
   const consistency = inputs.consistencyRequirement
   const consistencyInvalid = consistency <= 0
@@ -461,7 +487,7 @@ export default function App() {
     const nextTerms: Terms = next.alt ? terms : 'base'
     const nextBuffer = defaultBuffer(next)
     setSetup((prev) => ({
-      ...(prev ?? { approach, payoutTaken, strategy, curated }),
+      ...(prev ?? { approach, payoutTaken, strategy, curated: savedCurated }),
       templateId: next.id,
       terms: nextTerms,
       payoutsSoFar,
@@ -639,7 +665,7 @@ export default function App() {
             payoutTaken:
               setup.approach === 'dayByDay' ? setup.payoutTaken : null,
             strategy,
-            curated,
+            curated: savedCurated,
             balance: account.balance,
             largestProfitDay: snapshot.largestProfitDay,
             netProfit: snapshot.netProfit,
@@ -727,13 +753,14 @@ export default function App() {
     if (fastest <= MAX_SPELLED_COUNT) {
       const start = Math.max(results.minimumTradingDaysLeft, fastest)
       return {
-        ...curated,
+        ...savedCurated,
         mode: 'days',
         days: Math.min(start, MAX_SPELLED_COUNT),
+        daysFrom: counted,
       }
     }
     return {
-      ...curated,
+      ...savedCurated,
       mode: 'cap',
       cap: results.maxAllowedSingleDay.toFixed(2),
     }
@@ -744,7 +771,7 @@ export default function App() {
     setSetup({
       ...setup!,
       strategy: next,
-      curated: needsStart ? startingCurated() : curated,
+      curated: needsStart ? startingCurated() : savedCurated,
     })
   }
 
@@ -886,7 +913,12 @@ export default function App() {
                       onChange={(patch) =>
                         setSetup({
                           ...setup,
-                          curated: { ...curated, ...patch },
+                          curated: {
+                            ...savedCurated,
+                            ...patch,
+                            // A new count starts from the days logged so far.
+                            ...('days' in patch ? { daysFrom: counted } : {}),
+                          },
                         })
                       }
                       className="mt-4 max-w-xl rounded-lg border bg-card p-4"

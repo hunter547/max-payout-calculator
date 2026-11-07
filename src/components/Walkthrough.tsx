@@ -52,6 +52,8 @@ import {
 } from '@/lib/ledger'
 import {
   balanceHint,
+  countedDays,
+  curatedNow,
   deriveInputs,
   hasTakenPayout,
   resolvePlan,
@@ -370,7 +372,13 @@ export function Walkthrough({
       fastest: fastestDays(inputs, results),
       conservative: planFor(inputs, results, 'conservative'),
       aggressive: planFor(inputs, results, 'aggressive'),
-      curated: resolvePlan(inputs, results, 'curated', draft.curated),
+      counted: countedDays(inputs),
+      curated: resolvePlan(
+        inputs,
+        results,
+        'curated',
+        curatedNow(draft.curated, countedDays(inputs)),
+      ),
     }
   }, [step, draft, daySummary])
 
@@ -838,11 +846,17 @@ export function Walkthrough({
           {draft.strategy === 'curated' && preview && !preview.ready && (
             <CuratedControls
               idPrefix="walkthrough-curated"
-              value={draft.curated}
+              value={curatedNow(draft.curated, preview.counted)}
               fastest={preview.fastest}
               plan={preview.curated}
               onChange={(patch) =>
-                update({ curated: { ...draft.curated, ...patch } })
+                update({
+                  curated: {
+                    ...draft.curated,
+                    ...patch,
+                    ...('days' in patch ? { daysFrom: preview.counted } : {}),
+                  },
+                })
               }
               className="mt-6 rounded-lg border bg-card p-5"
             />

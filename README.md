@@ -735,7 +735,13 @@ usually agree, and the walkthrough says so when they do.
   headline spells out. The plan is that many equal days at the smallest amount
   that still pays out. Once some day count can pay out, every larger one can,
   so every option offered is valid. In the example above, 4 days is $525 a day
-  and 9 days is $227.78.
+  and 9 days is $227.78. The count is a countdown: the pick keeps how many
+  counted days were logged when it was made (`daysFrom`), and each counted day
+  logged since comes off it (`curatedNow` in `setup.ts`). Seven days with one
+  logged reads six. A counted day is one over the firm's bar where it sets
+  one, so a day under it leaves the count alone. Deleting a day puts its count
+  back, and the count never drops below one: a plan that runs out without a
+  payout is raised to the fewest days still possible.
 - **Daily cap**, which replaces the default and largest-day cap. The plan is the
   fewest days whose equal daily amount stays at or under it: a $700 cap gives
   4 days of $525. At the conservative cap this is exactly the conservative
