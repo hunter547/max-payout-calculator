@@ -303,6 +303,9 @@ export default function App() {
   const [adding, setAdding] = useState(false)
   const [takingPayout, setTakingPayout] = useState(false)
   const [calculating, setCalculating] = useState(false)
+  // The date last logged on any account this session. Traders log the same
+  // session across every account in turn, so the next account opens on it.
+  const [lastLogged, setLastLogged] = useState<string | null>(null)
   // The account picked in the walkthrough, before anything is saved, and the
   // theme that was showing before it moved.
   const [draftTemplate, setDraftTemplate] = useState<string | null>(null)
@@ -955,12 +958,16 @@ export default function App() {
           <div className="mt-14 grid grid-cols-1 gap-14 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-16">
             {approach === 'dayByDay' ? (
               <Ledger
+                // Each account starts its own form, rather than inheriting
+                // the date the last one moved on to.
+                key={openAccount?.id}
                 entries={sorted}
                 summary={summary}
-                suggestedDate={suggestDate(sorted)}
-                onAdd={(entry) =>
+                suggestedDate={suggestDate(sorted, lastLogged)}
+                onAdd={(entry) => {
                   setDays((prev) => [...prev, { id: newId(), ...entry }])
-                }
+                  setLastLogged(entry.date)
+                }}
                 onUpdate={(id, patch) =>
                   setDays((prev) =>
                     prev.map((d) => (d.id === id ? { ...d, ...patch } : d)),

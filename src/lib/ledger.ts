@@ -131,8 +131,20 @@ function latestDate(entries: DayEntry[]): string {
   return entries.reduce((a, b) => (a.date > b.date ? a : b)).date
 }
 
-/** Default date for a new row: the day after the latest entry, else today. */
-export function suggestDate(entries: DayEntry[]): string {
+/**
+ * Default date for a new row: the day after the latest entry, else today.
+ *
+ * `logged` is a date just logged on another account. Where this one has
+ * nothing on it yet and nothing after it, that is the day being caught up on,
+ * so it comes first.
+ */
+export function suggestDate(
+  entries: DayEntry[],
+  logged: string | null = null,
+): string {
+  const caughtUp =
+    logged !== null && entries.some((entry) => entry.date >= logged)
+  if (logged !== null && !caughtUp) return logged
   if (entries.length === 0) return todayISO()
   return nextTradingDate(latestDate(entries))
 }

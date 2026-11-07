@@ -1333,6 +1333,47 @@ describe('several accounts', () => {
     expect(other).toEqual(growth)
   })
 
+  it('opens the next account on the session just logged on the last', () => {
+    seed({
+      'mpc.accounts': [
+        builder,
+        { ...growth, days: [{ id: 'g', date: '2026-09-04', amount: '300' }] },
+      ],
+      'mpc.current': 'builder',
+    })
+    render()
+    const switchTo = (name: string) => {
+      act(() => {
+        container
+          .querySelector('button[aria-label="Switch account"]')!
+          .dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+          )
+      })
+      const item = Array.from(
+        document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+      ).find((el) => el.textContent?.trim() === name)
+      if (!item) throw new Error(`No menu item reading "${name}"`)
+      act(() => item.click())
+    }
+
+    addDay('2026-09-10', '300')
+    expect(byLabel('Date').value).toBe('2026-09-11')
+
+    // Not the date the last account moved on to, nor the day after this
+    // one's own latest (a Friday, so the Monday after): the session just
+    // logged, which this account has not had yet.
+    switchTo('Tradeify 50k Growth')
+    expect(header()).toContain('Tradeify 50k Growth')
+    expect(byLabel('Date').value).toBe('2026-09-10')
+    addDay('2026-09-10', '200')
+    expect(byLabel('Date').value).toBe('2026-09-11')
+
+    // Back on the first, which has that session, it carries on from its own.
+    switchTo('MyFundedFutures 50k Builder')
+    expect(byLabel('Date').value).toBe('2026-09-11')
+  })
+
   it('logs a day against the open account alone', () => {
     seedBoth('growth')
     render()

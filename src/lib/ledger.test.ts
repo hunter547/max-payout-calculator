@@ -111,6 +111,16 @@ describe('dates', () => {
     expect(suggestDate(entries)).toBe('2026-09-11')
   })
 
+  it('suggests a date just logged elsewhere until this ledger has it', () => {
+    const entries = [day('a', '2026-09-08', '1')]
+    // Behind it: the session being caught up on comes first.
+    expect(suggestDate(entries, '2026-09-10')).toBe('2026-09-10')
+    expect(suggestDate([], '2026-09-10')).toBe('2026-09-10')
+    // Logged here already, or older than this ledger: its own next day.
+    expect(suggestDate(entries, '2026-09-08')).toBe('2026-09-09')
+    expect(suggestDate(entries, '2026-09-04')).toBe('2026-09-09')
+  })
+
   it('starts the plan on the next trading day, never in the past', () => {
     // Latest entry is well before "today": the plan starts today.
     expect(planStartDate([day('a', '2026-09-01', '1')], '2026-09-10')).toBe(
